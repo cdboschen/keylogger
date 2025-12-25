@@ -185,6 +185,21 @@
             0% { transform: rotate(0deg); }
             100% { transform: rotate(360deg); }
         }
+        
+        .storage-info {
+            background: #e3f2fd;
+            padding: 10px;
+            border-radius: 8px;
+            margin-top: 10px;
+            font-size: 14px;
+            color: #1976d2;
+        }
+        
+        .export-section {
+            margin-top: 15px;
+            padding-top: 15px;
+            border-top: 2px solid #ddd;
+        }
     </style>
 </head>
 <body>
@@ -202,6 +217,7 @@
                 <button onclick="capturePhoto()">📸 Capture Photo</button>
                 <button onclick="saveKey()">💾 Save Key</button>
             </div>
+            <div class="storage-info" id="storageInfo"></div>
         </div>
         
         <div class="section">
@@ -219,6 +235,13 @@
             <button onclick="loadKeys()">🔄 Refresh List</button>
             <button onclick="clearAllKeys()" class="delete-btn">🗑️ Clear All Keys</button>
             <div id="keyList"></div>
+            
+            <div class="export-section">
+                <h3 style="color: #667eea; margin-bottom: 10px;">Backup & Restore</h3>
+                <button onclick="exportKeys()">📥 Export Keys (Download)</button>
+                <button onclick="document.getElementById('importFile').click()">📤 Import Keys (Upload)</button>
+                <input type="file" id="importFile" accept=".json" style="display: none;" onchange="importKeys(event)">
+            </div>
         </div>
     </div>
 
@@ -226,6 +249,47 @@
         let videoStream = null;
         let capturedImage = null;
         let identifyImage = null;
+        let db;
+        
+        // Initialize IndexedDB
+        function initDB() {
+            return new Promise((resolve, reject) => {
+                const request = indexedDB.open('KeyDatabase', 1);
+                
+                request.onerror = () => reject(request.error);
+                request.onsuccess = () => {
+                    db = request.result;
+                    resolve(db);
+                };
+                
+                request.onupgradeneeded = (event) => {
+                    const db = event.target.result;
+                    if (!db.objectStoreNames.contains('keys')) {
+                        db.createObjectStore('keys', { keyPath: 'id' });
+                    }
+                };
+            });
+        }
+        
+        // Convert image to grayscale and compress heavily
+        function processImage(canvas) {
+            const ctx = canvas.getContext('2d');
+            const imageData = ctx.getImageData(0, 0, canvas.width, canvas.height);
+            const data = imageData.data;
+            
+            // Convert to grayscale
+            for (let i = 0; i < data.length; i += 4) {
+                const gray = data[i] * 0.299 + data[i + 1] * 0.587 + data[i + 2] * 0.114;
+                data[i] = gray;     // R
+                data[i + 1] = gray; // G
+                data[i + 2] = gray; // B
+            }
+            
+            ctx.putImageData(imageData, 0, 0);
+            
+            // Return highly compressed JPEG (grayscale, 0.4 quality)
+            return canvas.toDataURL('image/jpeg', 0.4);
+        }
         
         async function startCamera() {
             try {
@@ -245,20 +309,40 @@
             const canvas = document.getElementById('captureCanvas');
             const context = canvas.getContext('2d');
             
-            canvas.width = video.videoWidth;
-            canvas.height = video.videoHeight;
-            context.drawImage(video, 0, 0);
+            // Resize to max 200px (smaller = more storage capacity)
+            const maxSize = 200;
+            let width = video.videoWidth;
+            let height = video.videoHeight;
             
-            capturedImage = canvas.toDataURL('image/png');
+            if (width > height) {
+                if (width > maxSize) {
+                    height = height * (maxSize / width);
+                    width = maxSize;
+                }
+            } else {
+                if (height > maxSize) {
+                    width = width * (maxSize / height);
+                    height = maxSize;
+                }
+            }
+            
+            canvas.width = width;
+            canvas.height = height;
+            context.drawImage(video, 0, 0, width, height);
+            
+            // Process image (grayscale + heavy compression)
+            capturedImage = processImage(canvas);
             canvas.classList.add('active');
             
             if (videoStream) {
                 videoStream.getTracks().forEach(track => track.stop());
                 video.classList.remove('active');
             }
+            
+            updateStorageInfo();
         }
         
-        function saveKey() {
+        async function saveKey() {
             const label = document.getElementById('keyLabel').value;
             const notes = document.getElementById('keyNotes').value;
             
@@ -272,24 +356,37 @@
                 return;
             }
             
-            const keys = JSON.parse(localStorage.getItem('keys') || '[]');
-            keys.push({
-                id: Date.now(),
-                label: label,
-                notes: notes,
-                image: capturedImage,
-                timestamp: new Date().toISOString()
-            });
-            
-            localStorage.setItem('keys', JSON.stringify(keys));
-            
-            document.getElementById('keyLabel').value = '';
-            document.getElementById('keyNotes').value = '';
-            document.getElementById('captureCanvas').classList.remove('active');
-            capturedImage = null;
-            
-            alert('Key saved successfully!');
-            loadKeys();
+            try {
+                await initDB();
+                
+                const key = {
+                    id: Date.now(),
+                    label: label,
+                    notes: notes,
+                    image: capturedImage,
+                    timestamp: new Date().toISOString()
+                };
+                
+                const transaction = db.transaction(['keys'], 'readwrite');
+                const objectStore = transaction.objectStore('keys');
+                objectStore.add(key);
+                
+                await new Promise((resolve, reject) => {
+                    transaction.oncomplete = resolve;
+                    transaction.onerror = () => reject(transaction.error);
+                });
+                
+                document.getElementById('keyLabel').value = '';
+                document.getElementById('keyNotes').value = '';
+                document.getElementById('captureCanvas').classList.remove('active');
+                capturedImage = null;
+                
+                alert('Key saved successfully!');
+                loadKeys();
+                updateStorageInfo();
+            } catch (e) {
+                alert('Error saving key: ' + e.message);
+            }
         }
         
         async function startIdentifyCamera() {
@@ -311,12 +408,28 @@
             const context = canvas.getContext('2d');
             const resultsDiv = document.getElementById('identifyResults');
             
-            // Capture the image
-            canvas.width = video.videoWidth;
-            canvas.height = video.videoHeight;
-            context.drawImage(video, 0, 0);
+            // Resize for comparison (same as capture)
+            const maxSize = 200;
+            let width = video.videoWidth;
+            let height = video.videoHeight;
             
-            identifyImage = canvas.toDataURL('image/png');
+            if (width > height) {
+                if (width > maxSize) {
+                    height = height * (maxSize / width);
+                    width = maxSize;
+                }
+            } else {
+                if (height > maxSize) {
+                    width = width * (maxSize / height);
+                    height = maxSize;
+                }
+            }
+            
+            canvas.width = width;
+            canvas.height = height;
+            context.drawImage(video, 0, 0, width, height);
+            
+            identifyImage = processImage(canvas);
             canvas.classList.add('active');
             
             if (videoStream) {
@@ -327,8 +440,9 @@
             // Show loading
             resultsDiv.innerHTML = '<div class="loading"><div class="spinner"></div><p>Analyzing key...</p></div>';
             
-            // Get stored keys
-            const keys = JSON.parse(localStorage.getItem('keys') || '[]');
+            // Get stored keys from IndexedDB
+            await initDB();
+            const keys = await getAllKeys();
             
             if (keys.length === 0) {
                 resultsDiv.innerHTML = '<div class="no-match">No keys in database. Please add some keys first.</div>';
@@ -340,6 +454,18 @@
             
             // Display results
             displayMatches(matches, resultsDiv);
+        }
+        
+        async function getAllKeys() {
+            await initDB();
+            return new Promise((resolve, reject) => {
+                const transaction = db.transaction(['keys'], 'readonly');
+                const objectStore = transaction.objectStore('keys');
+                const request = objectStore.getAll();
+                
+                request.onsuccess = () => resolve(request.result);
+                request.onerror = () => reject(request.error);
+            });
         }
         
         async function compareWithStoredKeys(capturedImage, storedKeys) {
@@ -387,12 +513,11 @@
                         
                         let diff = 0;
                         for (let i = 0; i < data1.length; i += 4) {
-                            diff += Math.abs(data1[i] - data2[i]); // R
-                            diff += Math.abs(data1[i+1] - data2[i+1]); // G
-                            diff += Math.abs(data1[i+2] - data2[i+2]); // B
+                            // Only compare R channel since it's grayscale
+                            diff += Math.abs(data1[i] - data2[i]);
                         }
                         
-                        const maxDiff = size * size * 255 * 3;
+                        const maxDiff = size * size * 255;
                         const similarity = ((maxDiff - diff) / maxDiff) * 100;
                         
                         resolve(similarity);
@@ -438,8 +563,8 @@
             resultsDiv.innerHTML = html;
         }
         
-        function loadKeys() {
-            const keys = JSON.parse(localStorage.getItem('keys') || '[]');
+        async function loadKeys() {
+            const keys = await getAllKeys();
             const keyList = document.getElementById('keyList');
             
             if (keys.length === 0) {
@@ -457,27 +582,112 @@
                     <button class="delete-btn" onclick="deleteKey(${key.id})">Delete</button>
                 </div>
             `).join('');
+            
+            updateStorageInfo();
         }
         
-        function deleteKey(id) {
+        async function deleteKey(id) {
             if (confirm('Are you sure you want to delete this key?')) {
-                let keys = JSON.parse(localStorage.getItem('keys') || '[]');
-                keys = keys.filter(key => key.id !== id);
-                localStorage.setItem('keys', JSON.stringify(keys));
+                await initDB();
+                const transaction = db.transaction(['keys'], 'readwrite');
+                const objectStore = transaction.objectStore('keys');
+                objectStore.delete(id);
+                
+                await new Promise((resolve) => {
+                    transaction.oncomplete = resolve;
+                });
+                
                 loadKeys();
             }
         }
         
-        function clearAllKeys() {
+        async function clearAllKeys() {
             if (confirm('Are you sure you want to delete ALL keys? This cannot be undone.')) {
-                localStorage.removeItem('keys');
+                await initDB();
+                const transaction = db.transaction(['keys'], 'readwrite');
+                const objectStore = transaction.objectStore('keys');
+                objectStore.clear();
+                
+                await new Promise((resolve) => {
+                    transaction.oncomplete = resolve;
+                });
+                
                 loadKeys();
                 alert('All keys have been deleted.');
             }
         }
         
-        // Load keys on page load
-        window.onload = loadKeys;
+        async function updateStorageInfo() {
+            const keys = await getAllKeys();
+            
+            // Estimate storage size
+            let totalSize = 0;
+            keys.forEach(key => {
+                totalSize += key.image.length; // Rough estimate
+            });
+            
+            const sizeMB = (totalSize / 1024 / 1024).toFixed(2);
+            
+            const infoDiv = document.getElementById('storageInfo');
+            infoDiv.innerHTML = `
+                📊 Storage: ${keys.length} keys stored | ~${sizeMB} MB used | Using IndexedDB (unlimited storage)
+            `;
+        }
+        
+        async function exportKeys() {
+            const keys = await getAllKeys();
+            const dataStr = JSON.stringify(keys, null, 2);
+            const dataBlob = new Blob([dataStr], { type: 'application/json' });
+            
+            const url = URL.createObjectURL(dataBlob);
+            const link = document.createElement('a');
+            link.href = url;
+            link.download = `keys-backup-${new Date().toISOString().split('T')[0]}.json`;
+            link.click();
+            URL.revokeObjectURL(url);
+            
+            alert(`Exported ${keys.length} keys successfully!`);
+        }
+        
+        async function importKeys(event) {
+            const file = event.target.files[0];
+            if (!file) return;
+            
+            const reader = new FileReader();
+            reader.onload = async (e) => {
+                try {
+                    const importedKeys = JSON.parse(e.target.result);
+                    
+                    await initDB();
+                    const transaction = db.transaction(['keys'], 'readwrite');
+                    const objectStore = transaction.objectStore('keys');
+                    
+                    for (const key of importedKeys) {
+                        // Generate new ID to avoid conflicts
+                        key.id = Date.now() + Math.random();
+                        objectStore.add(key);
+                    }
+                    
+                    await new Promise((resolve) => {
+                        transaction.oncomplete = resolve;
+                    });
+                    
+                    alert(`Imported ${importedKeys.length} keys successfully!`);
+                    loadKeys();
+                } catch (err) {
+                    alert('Error importing keys: ' + err.message);
+                }
+            };
+            
+            reader.readAsText(file);
+            event.target.value = ''; // Reset file input
+        }
+        
+        // Initialize on page load
+        window.onload = async () => {
+            await initDB();
+            loadKeys();
+        };
     </script>
 </body>
 </html>
