@@ -84,7 +84,7 @@
             border-color: #667eea;
         }
         
-        #video, #captureCanvas, #identifyCanvas {
+        #video, #identifyVideo {
             width: 100%;
             max-width: 400px;
             border-radius: 10px;
@@ -93,7 +93,19 @@
             box-shadow: 0 5px 15px rgba(0,0,0,0.2);
         }
         
-        #video.active, #captureCanvas.active, #identifyCanvas.active {
+        #video.active, #identifyVideo.active {
+            display: block;
+        }
+        
+        .preview-canvas {
+            max-width: 400px;
+            border-radius: 10px;
+            margin: 10px 0;
+            display: none;
+            box-shadow: 0 5px 15px rgba(0,0,0,0.2);
+        }
+        
+        .preview-canvas.active {
             display: block;
         }
         
@@ -208,24 +220,22 @@
         
         <div class="section">
             <h2>Add New Key</h2>
-            <video id="video" autoplay></video>
-            <canvas id="captureCanvas"></canvas>
             <input type="text" id="keyLabel" placeholder="Enter key label (e.g., 'Front Door', 'Car Key')">
             <input type="text" id="keyNotes" placeholder="Additional notes (optional)">
+            <video id="video" autoplay></video>
+            <canvas id="captureCanvas" class="preview-canvas"></canvas>
             <div>
-                <button onclick="startCamera()">📷 Start Camera</button>
-                <button onclick="capturePhoto()">📸 Capture Photo</button>
-                <button onclick="saveKey()">💾 Save Key</button>
+                <button onclick="addKey()">📷 Add Key</button>
             </div>
             <div class="storage-info" id="storageInfo"></div>
         </div>
         
         <div class="section">
             <h2>Identify Unknown Key</h2>
-            <canvas id="identifyCanvas"></canvas>
+            <video id="identifyVideo" autoplay></video>
+            <canvas id="identifyCanvas" class="preview-canvas"></canvas>
             <div id="identifyResults"></div>
             <div>
-                <button onclick="startIdentifyCamera()">📷 Start Camera</button>
                 <button onclick="identifyKey()">🔍 Identify Key</button>
             </div>
         </div>
@@ -277,83 +287,72 @@
             });
         }
         
-        async function startCamera() {
+        async function addKey() {
+            const label = document.getElementById('keyLabel').value.trim();
+            const notes = document.getElementById('keyNotes').value.trim();
+            
+            if (!label) {
+                alert('Please enter a key label first');
+                return;
+            }
+            
             try {
                 const video = document.getElementById('video');
+                const canvas = document.getElementById('captureCanvas');
+                const context = canvas.getContext('2d');
+                
+                // Start camera
                 videoStream = await navigator.mediaDevices.getUserMedia({ 
                     video: { facingMode: 'environment' } 
                 });
                 video.srcObject = videoStream;
                 video.classList.add('active');
-            } catch (err) {
-                alert('Error accessing camera: ' + err.message);
-            }
-        }
-        
-        function capturePhoto() {
-            const video = document.getElementById('video');
-            const canvas = document.getElementById('captureCanvas');
-            const context = canvas.getContext('2d');
-            
-            // Resize to max 200px while maintaining aspect ratio
-            const maxSize = 200;
-            let width = video.videoWidth;
-            let height = video.videoHeight;
-            
-            if (width > height) {
-                if (width > maxSize) {
-                    height = height * (maxSize / width);
-                    width = maxSize;
+                
+                // Wait for camera to initialize
+                await new Promise(resolve => setTimeout(resolve, 1000));
+                
+                // Capture photo
+                const maxSize = 200;
+                let width = video.videoWidth;
+                let height = video.videoHeight;
+                
+                if (width > height) {
+                    if (width > maxSize) {
+                        height = height * (maxSize / width);
+                        width = maxSize;
+                    }
+                } else {
+                    if (height > maxSize) {
+                        width = width * (maxSize / height);
+                        height = maxSize;
+                    }
                 }
-            } else {
-                if (height > maxSize) {
-                    width = width * (maxSize / height);
-                    height = maxSize;
+                
+                canvas.width = width;
+                canvas.height = height;
+                context.drawImage(video, 0, 0, width, height);
+                
+                // Convert to grayscale
+                const imageData = context.getImageData(0, 0, width, height);
+                const data = imageData.data;
+                for (let i = 0; i < data.length; i += 4) {
+                    const gray = data[i] * 0.299 + data[i + 1] * 0.587 + data[i + 2] * 0.114;
+                    data[i] = gray;
+                    data[i + 1] = gray;
+                    data[i + 2] = gray;
                 }
-            }
-            
-            canvas.width = width;
-            canvas.height = height;
-            context.drawImage(video, 0, 0, width, height);
-            
-            // Convert to grayscale
-            const imageData = context.getImageData(0, 0, width, height);
-            const data = imageData.data;
-            for (let i = 0; i < data.length; i += 4) {
-                const gray = data[i] * 0.299 + data[i + 1] * 0.587 + data[i + 2] * 0.114;
-                data[i] = gray;
-                data[i + 1] = gray;
-                data[i + 2] = gray;
-            }
-            context.putImageData(imageData, 0, 0);
-            
-            // Compress to JPEG with 0.5 quality
-            capturedImage = canvas.toDataURL('image/jpeg', 0.5);
-            canvas.classList.add('active');
-            
-            if (videoStream) {
-                videoStream.getTracks().forEach(track => track.stop());
-                video.classList.remove('active');
-            }
-            
-            updateStorageInfo();
-        }
-        
-        async function saveKey() {
-            const label = document.getElementById('keyLabel').value;
-            const notes = document.getElementById('keyNotes').value;
-            
-            if (!label) {
-                alert('Please enter a key label');
-                return;
-            }
-            
-            if (!capturedImage) {
-                alert('Please capture a photo first');
-                return;
-            }
-            
-            try {
+                context.putImageData(imageData, 0, 0);
+                
+                capturedImage = canvas.toDataURL('image/jpeg', 0.5);
+                canvas.classList.add('active');
+                
+                // Stop camera
+                if (videoStream) {
+                    videoStream.getTracks().forEach(track => track.stop());
+                    video.classList.remove('active');
+                }
+                
+                // Save to database
                 await initDB();
                 
                 const key = {
@@ -374,7 +373,12 @@
                     console.log('Key saved successfully');
                     document.getElementById('keyLabel').value = '';
                     document.getElementById('keyNotes').value = '';
-                    document.getElementById('captureCanvas').classList.remove('active');
+                    
+                    // Hide canvas after a moment
+                    setTimeout(() => {
+                        canvas.classList.remove('active');
+                    }, 2000);
+                    
                     capturedImage = null;
                     
                     alert('Key saved successfully!');
@@ -386,88 +390,96 @@
                     alert('Error saving key: ' + request.error);
                 };
                 
-            } catch (e) {
-                console.error('Error:', e);
-                alert('Error saving key: ' + e.message);
+            } catch (err) {
+                alert('Error: ' + err.message);
+                if (videoStream) {
+                    videoStream.getTracks().forEach(track => track.stop());
+                }
             }
         }
         
-        async function startIdentifyCamera() {
+        async function identifyKey() {
             try {
-                const video = document.getElementById('video');
+                const video = document.getElementById('identifyVideo');
+                const canvas = document.getElementById('identifyCanvas');
+                const context = canvas.getContext('2d');
+                const resultsDiv = document.getElementById('identifyResults');
+                
+                // Start camera
                 videoStream = await navigator.mediaDevices.getUserMedia({ 
                     video: { facingMode: 'environment' } 
                 });
                 video.srcObject = videoStream;
                 video.classList.add('active');
+                
+                // Wait for camera to initialize
+                await new Promise(resolve => setTimeout(resolve, 1000));
+                
+                // Capture photo
+                const maxSize = 200;
+                let width = video.videoWidth;
+                let height = video.videoHeight;
+                
+                if (width > height) {
+                    if (width > maxSize) {
+                        height = height * (maxSize / width);
+                        width = maxSize;
+                    }
+                } else {
+                    if (height > maxSize) {
+                        width = width * (maxSize / height);
+                        height = maxSize;
+                    }
+                }
+                
+                canvas.width = width;
+                canvas.height = height;
+                context.drawImage(video, 0, 0, width, height);
+                
+                // Convert to grayscale
+                const imageData = context.getImageData(0, 0, width, height);
+                const data = imageData.data;
+                for (let i = 0; i < data.length; i += 4) {
+                    const gray = data[i] * 0.299 + data[i + 1] * 0.587 + data[i + 2] * 0.114;
+                    data[i] = gray;
+                    data[i + 1] = gray;
+                    data[i + 2] = gray;
+                }
+                context.putImageData(imageData, 0, 0);
+                
+                identifyImage = canvas.toDataURL('image/jpeg', 0.5);
+                canvas.classList.add('active');
+                
+                // Stop camera
+                if (videoStream) {
+                    videoStream.getTracks().forEach(track => track.stop());
+                    video.classList.remove('active');
+                }
+                
+                // Show loading
+                resultsDiv.innerHTML = '<div class="loading"><div class="spinner"></div><p>Analyzing key...</p></div>';
+                
+                // Get stored keys
+                await initDB();
+                const keys = await getAllKeys();
+                
+                if (keys.length === 0) {
+                    resultsDiv.innerHTML = '<div class="no-match">No keys in database. Please add some keys first.</div>';
+                    return;
+                }
+                
+                // Compare with stored keys
+                const matches = await compareWithStoredKeys(identifyImage, keys);
+                
+                // Display results
+                displayMatches(matches, resultsDiv);
+                
             } catch (err) {
-                alert('Error accessing camera: ' + err.message);
-            }
-        }
-        
-        async function identifyKey() {
-            const video = document.getElementById('video');
-            const canvas = document.getElementById('identifyCanvas');
-            const context = canvas.getContext('2d');
-            const resultsDiv = document.getElementById('identifyResults');
-            
-            // Resize for comparison (same as capture)
-            const maxSize = 200;
-            let width = video.videoWidth;
-            let height = video.videoHeight;
-            
-            if (width > height) {
-                if (width > maxSize) {
-                    height = height * (maxSize / width);
-                    width = maxSize;
-                }
-            } else {
-                if (height > maxSize) {
-                    width = width * (maxSize / height);
-                    height = maxSize;
+                alert('Error: ' + err.message);
+                if (videoStream) {
+                    videoStream.getTracks().forEach(track => track.stop());
                 }
             }
-            
-            canvas.width = width;
-            canvas.height = height;
-            context.drawImage(video, 0, 0, width, height);
-            
-            // Convert to grayscale
-            const imageData = context.getImageData(0, 0, width, height);
-            const data = imageData.data;
-            for (let i = 0; i < data.length; i += 4) {
-                const gray = data[i] * 0.299 + data[i + 1] * 0.587 + data[i + 2] * 0.114;
-                data[i] = gray;
-                data[i + 1] = gray;
-                data[i + 2] = gray;
-            }
-            context.putImageData(imageData, 0, 0);
-            
-            identifyImage = canvas.toDataURL('image/jpeg', 0.5);
-            canvas.classList.add('active');
-            
-            if (videoStream) {
-                videoStream.getTracks().forEach(track => track.stop());
-                video.classList.remove('active');
-            }
-            
-            // Show loading
-            resultsDiv.innerHTML = '<div class="loading"><div class="spinner"></div><p>Analyzing key...</p></div>';
-            
-            // Get stored keys from IndexedDB
-            await initDB();
-            const keys = await getAllKeys();
-            
-            if (keys.length === 0) {
-                resultsDiv.innerHTML = '<div class="no-match">No keys in database. Please add some keys first.</div>';
-                return;
-            }
-            
-            // Compare with stored keys
-            const matches = await compareWithStoredKeys(identifyImage, keys);
-            
-            // Display results
-            displayMatches(matches, resultsDiv);
         }
         
         async function getAllKeys() {
@@ -496,9 +508,7 @@
                 });
             }
             
-            // Sort by similarity (highest first)
             matches.sort((a, b) => b.similarity - a.similarity);
-            
             return matches;
         }
         
@@ -517,7 +527,6 @@
                 function checkLoaded() {
                     loaded++;
                     if (loaded === 2) {
-                        // Resize to same dimensions for comparison
                         const size = 100;
                         canvas1.width = canvas2.width = size;
                         canvas1.height = canvas2.height = size;
@@ -530,7 +539,6 @@
                         
                         let diff = 0;
                         for (let i = 0; i < data1.length; i += 4) {
-                            // Only compare grayscale (R channel)
                             diff += Math.abs(data1[i] - data2[i]);
                         }
                         
@@ -555,7 +563,7 @@
             }
             
             let html = '';
-            const topMatches = matches.slice(0, 3); // Show top 3 matches
+            const topMatches = matches.slice(0, 3);
             
             topMatches.forEach((match, index) => {
                 const isBestMatch = index === 0 && match.similarity > 50;
@@ -586,6 +594,7 @@
             
             if (keys.length === 0) {
                 keyList.innerHTML = '<p>No keys stored yet.</p>';
+                updateStorageInfo();
                 return;
             }
             
@@ -704,7 +713,6 @@
             event.target.value = '';
         }
         
-        // Initialize on page load
         window.onload = async () => {
             await initDB();
             loadKeys();
