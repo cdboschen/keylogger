@@ -69,6 +69,11 @@
             transform: translateY(0);
         }
         
+        button:disabled {
+            opacity: 0.5;
+            cursor: not-allowed;
+        }
+        
         input[type="text"] {
             width: 100%;
             padding: 12px;
@@ -84,7 +89,7 @@
             border-color: #667eea;
         }
         
-        #video, #captureCanvas, #identifyCanvas {
+        #video {
             width: 100%;
             max-width: 400px;
             border-radius: 10px;
@@ -93,8 +98,15 @@
             box-shadow: 0 5px 15px rgba(0,0,0,0.2);
         }
         
-        #video.active, #captureCanvas.active, #identifyCanvas.active {
+        #video.active {
             display: block;
+        }
+        
+        .preview-image {
+            max-width: 300px;
+            border-radius: 10px;
+            margin: 15px 0;
+            box-shadow: 0 5px 15px rgba(0,0,0,0.2);
         }
         
         .key-item {
@@ -200,6 +212,15 @@
             padding-top: 15px;
             border-top: 2px solid #ddd;
         }
+        
+        .step-indicator {
+            background: #fff3cd;
+            padding: 10px;
+            border-radius: 8px;
+            margin: 10px 0;
+            color: #856404;
+            font-weight: 500;
+        }
     </style>
 </head>
 <body>
@@ -208,25 +229,37 @@
         
         <div class="section">
             <h2>Add New Key</h2>
-            <video id="video" autoplay></video>
-            <canvas id="captureCanvas"></canvas>
-            <input type="text" id="keyLabel" placeholder="Enter key label (e.g., 'Front Door', 'Car Key')">
-            <input type="text" id="keyNotes" placeholder="Additional notes (optional)">
-            <div>
-                <button onclick="startCamera()">📷 Start Camera</button>
-                <button onclick="capturePhoto()">📸 Capture Photo</button>
-                <button onclick="saveKey()">💾 Save Key</button>
+            
+            <div id="addKeyForm">
+                <input type="text" id="keyLabel" placeholder="Enter key label (e.g., 'Front Door', 'Car Key')">
+                <input type="text" id="keyNotes" placeholder="Additional notes (optional)">
+                
+                <video id="video" autoplay></video>
+                <div id="photoPreview"></div>
+                
+                <div id="step1" class="step-indicator" style="display: none;">
+                    Step 1: Fill in the key label above
+                </div>
+                
+                <div>
+                    <button id="takePhotoBtn" onclick="takePhoto()">📷 Take Photo</button>
+                    <button id="saveBtn" onclick="saveKey()" style="display: none;">💾 Save Key</button>
+                    <button id="retakeBtn" onclick="retakePhoto()" style="display: none;">🔄 Retake Photo</button>
+                </div>
             </div>
+            
             <div class="storage-info" id="storageInfo"></div>
         </div>
         
         <div class="section">
             <h2>Identify Unknown Key</h2>
-            <canvas id="identifyCanvas"></canvas>
+            <video id="identifyVideo" autoplay></video>
+            <div id="identifyPhotoPreview"></div>
             <div id="identifyResults"></div>
             <div>
-                <button onclick="startIdentifyCamera()">📷 Start Camera</button>
-                <button onclick="identifyKey()">🔍 Identify Key</button>
+                <button id="identifyPhotoBtn" onclick="takeIdentifyPhoto()">📷 Take Photo</button>
+                <button id="identifyBtn" onclick="identifyKey()" style="display: none;">🔍 Identify Key</button>
+                <button id="retakeIdentifyBtn" onclick="retakeIdentifyPhoto()" style="display: none;">🔄 Retake</button>
             </div>
         </div>
         
@@ -271,7 +304,7 @@
             });
         }
         
-        // Convert image to grayscale and compress heavily
+        // Convert image to grayscale and compress
         function processImage(canvas) {
             const ctx = canvas.getContext('2d');
             const imageData = ctx.getImageData(0, 0, canvas.width, canvas.height);
@@ -280,18 +313,23 @@
             // Convert to grayscale
             for (let i = 0; i < data.length; i += 4) {
                 const gray = data[i] * 0.299 + data[i + 1] * 0.587 + data[i + 2] * 0.114;
-                data[i] = gray;     // R
-                data[i + 1] = gray; // G
-                data[i + 2] = gray; // B
+                data[i] = gray;
+                data[i + 1] = gray;
+                data[i + 2] = gray;
             }
             
             ctx.putImageData(imageData, 0, 0);
-            
-            // Return highly compressed JPEG (grayscale, 0.4 quality)
             return canvas.toDataURL('image/jpeg', 0.4);
         }
         
-        async function startCamera() {
+        async function takePhoto() {
+            const label = document.getElementById('keyLabel').value.trim();
+            
+            if (!label) {
+                alert('Please enter a key label first');
+                return;
+            }
+            
             try {
                 const video = document.getElementById('video');
                 videoStream = await navigator.mediaDevices.getUserMedia({ 
@@ -299,52 +337,68 @@
                 });
                 video.srcObject = videoStream;
                 video.classList.add('active');
+                
+                // Wait a moment for camera to initialize
+                await new Promise(resolve => setTimeout(resolve, 500));
+                
+                // Capture the photo
+                const canvas = document.createElement('canvas');
+                const context = canvas.getContext('2d');
+                
+                // Resize to max 200px
+                const maxSize = 200;
+                let width = video.videoWidth;
+                let height = video.videoHeight;
+                
+                if (width > height) {
+                    if (width > maxSize) {
+                        height = height * (maxSize / width);
+                        width = maxSize;
+                    }
+                } else {
+                    if (height > maxSize) {
+                        width = width * (maxSize / height);
+                        height = maxSize;
+                    }
+                }
+                
+                canvas.width = width;
+                canvas.height = height;
+                context.drawImage(video, 0, 0, width, height);
+                
+                capturedImage = processImage(canvas);
+                
+                // Stop camera
+                if (videoStream) {
+                    videoStream.getTracks().forEach(track => track.stop());
+                    video.classList.remove('active');
+                }
+                
+                // Show preview
+                const preview = document.getElementById('photoPreview');
+                preview.innerHTML = `<img src="${capturedImage}" class="preview-image" alt="Captured key">`;
+                
+                // Update buttons
+                document.getElementById('takePhotoBtn').style.display = 'none';
+                document.getElementById('saveBtn').style.display = 'inline-block';
+                document.getElementById('retakeBtn').style.display = 'inline-block';
+                
             } catch (err) {
                 alert('Error accessing camera: ' + err.message);
             }
         }
         
-        function capturePhoto() {
-            const video = document.getElementById('video');
-            const canvas = document.getElementById('captureCanvas');
-            const context = canvas.getContext('2d');
-            
-            // Resize to max 200px (smaller = more storage capacity)
-            const maxSize = 200;
-            let width = video.videoWidth;
-            let height = video.videoHeight;
-            
-            if (width > height) {
-                if (width > maxSize) {
-                    height = height * (maxSize / width);
-                    width = maxSize;
-                }
-            } else {
-                if (height > maxSize) {
-                    width = width * (maxSize / height);
-                    height = maxSize;
-                }
-            }
-            
-            canvas.width = width;
-            canvas.height = height;
-            context.drawImage(video, 0, 0, width, height);
-            
-            // Process image (grayscale + heavy compression)
-            capturedImage = processImage(canvas);
-            canvas.classList.add('active');
-            
-            if (videoStream) {
-                videoStream.getTracks().forEach(track => track.stop());
-                video.classList.remove('active');
-            }
-            
-            updateStorageInfo();
+        function retakePhoto() {
+            capturedImage = null;
+            document.getElementById('photoPreview').innerHTML = '';
+            document.getElementById('takePhotoBtn').style.display = 'inline-block';
+            document.getElementById('saveBtn').style.display = 'none';
+            document.getElementById('retakeBtn').style.display = 'none';
         }
         
         async function saveKey() {
-            const label = document.getElementById('keyLabel').value;
-            const notes = document.getElementById('keyNotes').value;
+            const label = document.getElementById('keyLabel').value.trim();
+            const notes = document.getElementById('keyNotes').value.trim();
             
             if (!label) {
                 alert('Please enter a key label');
@@ -352,7 +406,7 @@
             }
             
             if (!capturedImage) {
-                alert('Please capture a photo first');
+                alert('Please take a photo first');
                 return;
             }
             
@@ -376,71 +430,97 @@
                     transaction.onerror = () => reject(transaction.error);
                 });
                 
+                // Reset form
                 document.getElementById('keyLabel').value = '';
                 document.getElementById('keyNotes').value = '';
-                document.getElementById('captureCanvas').classList.remove('active');
+                document.getElementById('photoPreview').innerHTML = '';
                 capturedImage = null;
+                
+                document.getElementById('takePhotoBtn').style.display = 'inline-block';
+                document.getElementById('saveBtn').style.display = 'none';
+                document.getElementById('retakeBtn').style.display = 'none';
                 
                 alert('Key saved successfully!');
                 loadKeys();
-                updateStorageInfo();
+                
             } catch (e) {
+                console.error('Save error:', e);
                 alert('Error saving key: ' + e.message);
             }
         }
         
-        async function startIdentifyCamera() {
+        async function takeIdentifyPhoto() {
             try {
-                const video = document.getElementById('video');
+                const video = document.getElementById('identifyVideo');
                 videoStream = await navigator.mediaDevices.getUserMedia({ 
                     video: { facingMode: 'environment' } 
                 });
                 video.srcObject = videoStream;
-                video.classList.add('active');
+                video.style.display = 'block';
+                
+                await new Promise(resolve => setTimeout(resolve, 500));
+                
+                const canvas = document.createElement('canvas');
+                const context = canvas.getContext('2d');
+                
+                const maxSize = 200;
+                let width = video.videoWidth;
+                let height = video.videoHeight;
+                
+                if (width > height) {
+                    if (width > maxSize) {
+                        height = height * (maxSize / width);
+                        width = maxSize;
+                    }
+                } else {
+                    if (height > maxSize) {
+                        width = width * (maxSize / height);
+                        height = maxSize;
+                    }
+                }
+                
+                canvas.width = width;
+                canvas.height = height;
+                context.drawImage(video, 0, 0, width, height);
+                
+                identifyImage = processImage(canvas);
+                
+                if (videoStream) {
+                    videoStream.getTracks().forEach(track => track.stop());
+                    video.style.display = 'none';
+                }
+                
+                const preview = document.getElementById('identifyPhotoPreview');
+                preview.innerHTML = `<img src="${identifyImage}" class="preview-image" alt="Key to identify">`;
+                
+                document.getElementById('identifyPhotoBtn').style.display = 'none';
+                document.getElementById('identifyBtn').style.display = 'inline-block';
+                document.getElementById('retakeIdentifyBtn').style.display = 'inline-block';
+                
             } catch (err) {
                 alert('Error accessing camera: ' + err.message);
             }
         }
         
+        function retakeIdentifyPhoto() {
+            identifyImage = null;
+            document.getElementById('identifyPhotoPreview').innerHTML = '';
+            document.getElementById('identifyResults').innerHTML = '';
+            document.getElementById('identifyPhotoBtn').style.display = 'inline-block';
+            document.getElementById('identifyBtn').style.display = 'none';
+            document.getElementById('retakeIdentifyBtn').style.display = 'none';
+        }
+        
         async function identifyKey() {
-            const video = document.getElementById('video');
-            const canvas = document.getElementById('identifyCanvas');
-            const context = canvas.getContext('2d');
             const resultsDiv = document.getElementById('identifyResults');
             
-            // Resize for comparison (same as capture)
-            const maxSize = 200;
-            let width = video.videoWidth;
-            let height = video.videoHeight;
-            
-            if (width > height) {
-                if (width > maxSize) {
-                    height = height * (maxSize / width);
-                    width = maxSize;
-                }
-            } else {
-                if (height > maxSize) {
-                    width = width * (maxSize / height);
-                    height = maxSize;
-                }
+            if (!identifyImage) {
+                alert('Please take a photo first');
+                return;
             }
             
-            canvas.width = width;
-            canvas.height = height;
-            context.drawImage(video, 0, 0, width, height);
-            
-            identifyImage = processImage(canvas);
-            canvas.classList.add('active');
-            
-            if (videoStream) {
-                videoStream.getTracks().forEach(track => track.stop());
-                video.classList.remove('active');
-            }
-            
-            // Show loading
             resultsDiv.innerHTML = '<div class="loading"><div class="spinner"></div><p>Analyzing key...</p></div>';
             
-            // Get stored keys from IndexedDB
             await initDB();
             const keys = await getAllKeys();
             
@@ -449,10 +529,7 @@
                 return;
             }
             
-            // Compare with stored keys
             const matches = await compareWithStoredKeys(identifyImage, keys);
-            
-            // Display results
             displayMatches(matches, resultsDiv);
         }
         
@@ -479,9 +556,7 @@
                 });
             }
             
-            // Sort by similarity (highest first)
             matches.sort((a, b) => b.similarity - a.similarity);
-            
             return matches;
         }
         
@@ -500,7 +575,6 @@
                 function checkLoaded() {
                     loaded++;
                     if (loaded === 2) {
-                        // Resize to same dimensions for comparison
                         const size = 100;
                         canvas1.width = canvas2.width = size;
                         canvas1.height = canvas2.height = size;
@@ -513,7 +587,6 @@
                         
                         let diff = 0;
                         for (let i = 0; i < data1.length; i += 4) {
-                            // Only compare R channel since it's grayscale
                             diff += Math.abs(data1[i] - data2[i]);
                         }
                         
@@ -538,7 +611,7 @@
             }
             
             let html = '';
-            const topMatches = matches.slice(0, 3); // Show top 3 matches
+            const topMatches = matches.slice(0, 3);
             
             topMatches.forEach((match, index) => {
                 const isBestMatch = index === 0 && match.similarity > 50;
@@ -569,6 +642,7 @@
             
             if (keys.length === 0) {
                 keyList.innerHTML = '<p>No keys stored yet.</p>';
+                updateStorageInfo();
                 return;
             }
             
@@ -620,17 +694,16 @@
         async function updateStorageInfo() {
             const keys = await getAllKeys();
             
-            // Estimate storage size
             let totalSize = 0;
             keys.forEach(key => {
-                totalSize += key.image.length; // Rough estimate
+                totalSize += key.image.length;
             });
             
             const sizeMB = (totalSize / 1024 / 1024).toFixed(2);
             
             const infoDiv = document.getElementById('storageInfo');
             infoDiv.innerHTML = `
-                📊 Storage: ${keys.length} keys stored | ~${sizeMB} MB used | Using IndexedDB (unlimited storage)
+                📊 ${keys.length} keys stored | ~${sizeMB} MB used | Using IndexedDB (can store 100s of keys)
             `;
         }
         
@@ -663,7 +736,6 @@
                     const objectStore = transaction.objectStore('keys');
                     
                     for (const key of importedKeys) {
-                        // Generate new ID to avoid conflicts
                         key.id = Date.now() + Math.random();
                         objectStore.add(key);
                     }
@@ -680,10 +752,9 @@
             };
             
             reader.readAsText(file);
-            event.target.value = ''; // Reset file input
+            event.target.value = '';
         }
         
-        // Initialize on page load
         window.onload = async () => {
             await initDB();
             loadKeys();
