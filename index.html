@@ -4,6 +4,7 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Key Identification System</title>
+    <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🔑</text></svg>">
     <style>
         * {
             margin: 0;
@@ -41,7 +42,6 @@
         .key-icon {
             width: 50px;
             height: 50px;
-            fill: #f39c12;
         }
         
         .section {
@@ -194,7 +194,7 @@
         }
         
         .spinner {
-            border: 4px solid #3f3f3;
+            border: 4px solid #f3f3f3;
             border-top: 4px solid #667eea;
             border-radius: 50%;
             width: 40px;
@@ -231,9 +231,7 @@
 <body>
     <div class="container">
         <h1>
-            <svg class="key-icon" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
-                <path d="M12.65 10C11.83 7.67 9.61 6 7 6c-3.31 0-6 2.69-6 6s2.69 6 6 6c2.61 0 4.83-1.67 5.65-4H17v4h4v-4h2v-4H12.65zM7 14c-1.1 0-2-.9-2-2s.9-2 2-2 2 .9 2 2-.9 2-2 2z"/>
-            </svg>
+            <img src="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='%23f39c12'%3E%3Cpath d='M12.65 10C11.83 7.67 9.61 6 7 6c-3.31 0-6 2.69-6 6s2.69 6 6 6c2.61 0 4.83-1.67 5.65-4H17v4h4v-4h2v-4H12.65zM7 14c-1.1 0-2-.9-2-2s.9-2 2-2 2 .9 2 2-.9 2-2 2z'/%3E%3C/svg%3E" class="key-icon" alt="Key">
             Key Identification System
         </h1>
         
@@ -244,8 +242,8 @@
             <video id="video" autoplay></video>
             <canvas id="captureCanvas" class="preview-canvas"></canvas>
             <div>
-                <button id="addKeyBtn" onclick="startAddKey()">📷 Add Key</button>
-                <button id="captureBtn" class="hidden" onclick="captureAndSave()">📸 Capture Photo</button>
+                <button id="addKeyBtn" onclick="startAddKey()">Add Key</button>
+                <button id="captureBtn" class="hidden" onclick="captureAndSave()">Capture Photo</button>
             </div>
             <div class="storage-info" id="storageInfo"></div>
         </div>
@@ -256,21 +254,21 @@
             <canvas id="identifyCanvas" class="preview-canvas"></canvas>
             <div id="identifyResults"></div>
             <div>
-                <button id="identifyKeyBtn" onclick="startIdentify()">🔍 Identify Key</button>
-                <button id="captureIdentifyBtn" class="hidden" onclick="captureAndIdentify()">📸 Capture Photo</button>
+                <button id="identifyKeyBtn" onclick="startIdentify()">Identify Key</button>
+                <button id="captureIdentifyBtn" class="hidden" onclick="captureAndIdentify()">Capture Photo</button>
             </div>
         </div>
         
         <div class="section">
             <h2>Stored Keys</h2>
-            <button onclick="loadKeys()">🔄 Refresh List</button>
-            <button onclick="clearAllKeys()" class="delete-btn">🗑️ Clear All Keys</button>
+            <button onclick="loadKeys()">Refresh List</button>
+            <button onclick="clearAllKeys()" class="delete-btn">Clear All Keys</button>
             <div id="keyList"></div>
             
             <div class="export-section">
                 <h3 style="color: #667eea; margin-bottom: 10px;">Backup & Restore</h3>
-                <button onclick="exportKeys()">📥 Export Keys</button>
-                <button onclick="document.getElementById('importFile').click()">📤 Import Keys</button>
+                <button onclick="exportKeys()">Export Keys</button>
+                <button onclick="document.getElementById('importFile').click()">Import Keys</button>
                 <input type="file" id="importFile" accept=".json" style="display: none;" onchange="importKeys(event)">
             </div>
         </div>
@@ -283,7 +281,6 @@
         let identifyImage = null;
         let db;
         
-        // Initialize IndexedDB
         async function initDB() {
             return new Promise((resolve, reject) => {
                 const request = indexedDB.open('KeyDatabase', 1);
@@ -320,14 +317,12 @@
             try {
                 const video = document.getElementById('video');
                 
-                // Start camera
                 videoStream = await navigator.mediaDevices.getUserMedia({ 
                     video: { facingMode: 'environment' } 
                 });
                 video.srcObject = videoStream;
                 video.classList.add('active');
                 
-                // Show capture button, hide add key button
                 document.getElementById('addKeyBtn').classList.add('hidden');
                 document.getElementById('captureBtn').classList.remove('hidden');
                 
@@ -344,7 +339,6 @@
             const context = canvas.getContext('2d');
             
             try {
-                // Capture photo
                 const maxSize = 200;
                 let width = video.videoWidth;
                 let height = video.videoHeight;
@@ -365,7 +359,6 @@
                 canvas.height = height;
                 context.drawImage(video, 0, 0, width, height);
                 
-                // Convert to grayscale
                 const imageData = context.getImageData(0, 0, width, height);
                 const data = imageData.data;
                 for (let i = 0; i < data.length; i += 4) {
@@ -379,17 +372,14 @@
                 capturedImage = canvas.toDataURL('image/jpeg', 0.5);
                 canvas.classList.add('active');
                 
-                // Stop camera
                 if (videoStream) {
                     videoStream.getTracks().forEach(track => track.stop());
                     video.classList.remove('active');
                 }
                 
-                // Reset buttons
                 document.getElementById('addKeyBtn').classList.remove('hidden');
                 document.getElementById('captureBtn').classList.add('hidden');
                 
-                // Save to database
                 await initDB();
                 
                 const key = {
@@ -411,7 +401,6 @@
                     document.getElementById('keyLabel').value = '';
                     document.getElementById('keyNotes').value = '';
                     
-                    // Hide canvas after a moment
                     setTimeout(() => {
                         canvas.classList.remove('active');
                     }, 2000);
@@ -436,14 +425,12 @@
             try {
                 const video = document.getElementById('identifyVideo');
                 
-                // Start camera
                 identifyStream = await navigator.mediaDevices.getUserMedia({ 
                     video: { facingMode: 'environment' } 
                 });
                 video.srcObject = identifyStream;
                 video.classList.add('active');
                 
-                // Show capture button, hide identify button
                 document.getElementById('identifyKeyBtn').classList.add('hidden');
                 document.getElementById('captureIdentifyBtn').classList.remove('hidden');
                 
@@ -459,7 +446,6 @@
             const resultsDiv = document.getElementById('identifyResults');
             
             try {
-                // Capture photo
                 const maxSize = 200;
                 let width = video.videoWidth;
                 let height = video.videoHeight;
@@ -480,7 +466,6 @@
                 canvas.height = height;
                 context.drawImage(video, 0, 0, width, height);
                 
-                // Convert to grayscale
                 const imageData = context.getImageData(0, 0, width, height);
                 const data = imageData.data;
                 for (let i = 0; i < data.length; i += 4) {
@@ -494,20 +479,16 @@
                 identifyImage = canvas.toDataURL('image/jpeg', 0.5);
                 canvas.classList.add('active');
                 
-                // Stop camera
                 if (identifyStream) {
                     identifyStream.getTracks().forEach(track => track.stop());
                     video.classList.remove('active');
                 }
                 
-                // Reset buttons
                 document.getElementById('identifyKeyBtn').classList.remove('hidden');
                 document.getElementById('captureIdentifyBtn').classList.add('hidden');
                 
-                // Show loading
                 resultsDiv.innerHTML = '<div class="loading"><div class="spinner"></div><p>Analyzing key...</p></div>';
                 
-                // Get stored keys
                 await initDB();
                 const keys = await getAllKeys();
                 
@@ -516,10 +497,7 @@
                     return;
                 }
                 
-                // Compare with stored keys
                 const matches = await compareWithStoredKeys(identifyImage, keys);
-                
-                // Display results
                 displayMatches(matches, resultsDiv);
                 
             } catch (err) {
@@ -616,7 +594,7 @@
                 
                 html += `
                     <div class="${matchClass}">
-                        ${isBestMatch ? '<h3>✓ Best Match</h3>' : '<h3>Possible Match #' + (index + 1) + '</h3>'}
+                        ${isBestMatch ? '<h3>Best Match</h3>' : '<h3>Possible Match #' + (index + 1) + '</h3>'}
                         <div class="match-score">${match.similarity.toFixed(1)}% Similar</div>
                         <p><strong>Label:</strong> ${match.key.label}</p>
                         ${match.key.notes ? `<p><strong>Notes:</strong> ${match.key.notes}</p>` : ''}
@@ -627,7 +605,7 @@
             });
             
             if (matches[0].similarity < 50) {
-                html = '<div class="no-match">⚠️ No confident matches found. The best match is only ' + matches[0].similarity.toFixed(1) + '% similar.</div>' + html;
+                html = '<div class="no-match">No confident matches found. The best match is only ' + matches[0].similarity.toFixed(1) + '% similar.</div>' + html;
             }
             
             resultsDiv.innerHTML = html;
@@ -700,7 +678,7 @@
             
             const infoDiv = document.getElementById('storageInfo');
             infoDiv.innerHTML = `
-                📊 ${keys.length} keys stored | ~${sizeMB} MB used | IndexedDB (can store 100s of keys)
+                ${keys.length} keys stored | ~${sizeMB} MB used | IndexedDB (can store 100s of keys)
             `;
         }
         
