@@ -212,6 +212,10 @@
             padding-top: 15px;
             border-top: 2px solid #ddd;
         }
+        
+        .hidden {
+            display: none;
+        }
     </style>
 </head>
 <body>
@@ -225,7 +229,8 @@
             <video id="video" autoplay></video>
             <canvas id="captureCanvas" class="preview-canvas"></canvas>
             <div>
-                <button onclick="addKey()">📷 Add Key</button>
+                <button id="addKeyBtn" onclick="startAddKey()">📷 Add Key</button>
+                <button id="captureBtn" class="hidden" onclick="captureAndSave()">📸 Capture Photo</button>
             </div>
             <div class="storage-info" id="storageInfo"></div>
         </div>
@@ -236,7 +241,8 @@
             <canvas id="identifyCanvas" class="preview-canvas"></canvas>
             <div id="identifyResults"></div>
             <div>
-                <button onclick="identifyKey()">🔍 Identify Key</button>
+                <button id="identifyKeyBtn" onclick="startIdentify()">🔍 Identify Key</button>
+                <button id="captureIdentifyBtn" class="hidden" onclick="captureAndIdentify()">📸 Capture Photo</button>
             </div>
         </div>
         
@@ -257,6 +263,7 @@
 
     <script>
         let videoStream = null;
+        let identifyStream = null;
         let capturedImage = null;
         let identifyImage = null;
         let db;
@@ -287,9 +294,8 @@
             });
         }
         
-        async function addKey() {
+        async function startAddKey() {
             const label = document.getElementById('keyLabel').value.trim();
-            const notes = document.getElementById('keyNotes').value.trim();
             
             if (!label) {
                 alert('Please enter a key label first');
@@ -298,8 +304,6 @@
             
             try {
                 const video = document.getElementById('video');
-                const canvas = document.getElementById('captureCanvas');
-                const context = canvas.getContext('2d');
                 
                 // Start camera
                 videoStream = await navigator.mediaDevices.getUserMedia({ 
@@ -308,9 +312,23 @@
                 video.srcObject = videoStream;
                 video.classList.add('active');
                 
-                // Wait for camera to initialize
-                await new Promise(resolve => setTimeout(resolve, 1000));
+                // Show capture button, hide add key button
+                document.getElementById('addKeyBtn').classList.add('hidden');
+                document.getElementById('captureBtn').classList.remove('hidden');
                 
+            } catch (err) {
+                alert('Error accessing camera: ' + err.message);
+            }
+        }
+        
+        async function captureAndSave() {
+            const label = document.getElementById('keyLabel').value.trim();
+            const notes = document.getElementById('keyNotes').value.trim();
+            const video = document.getElementById('video');
+            const canvas = document.getElementById('captureCanvas');
+            const context = canvas.getContext('2d');
+            
+            try {
                 // Capture photo
                 const maxSize = 200;
                 let width = video.videoWidth;
@@ -352,6 +370,10 @@
                     video.classList.remove('active');
                 }
                 
+                // Reset buttons
+                document.getElementById('addKeyBtn').classList.remove('hidden');
+                document.getElementById('captureBtn').classList.add('hidden');
+                
                 // Save to database
                 await initDB();
                 
@@ -392,29 +414,36 @@
                 
             } catch (err) {
                 alert('Error: ' + err.message);
-                if (videoStream) {
-                    videoStream.getTracks().forEach(track => track.stop());
-                }
             }
         }
         
-        async function identifyKey() {
+        async function startIdentify() {
             try {
                 const video = document.getElementById('identifyVideo');
-                const canvas = document.getElementById('identifyCanvas');
-                const context = canvas.getContext('2d');
-                const resultsDiv = document.getElementById('identifyResults');
                 
                 // Start camera
-                videoStream = await navigator.mediaDevices.getUserMedia({ 
+                identifyStream = await navigator.mediaDevices.getUserMedia({ 
                     video: { facingMode: 'environment' } 
                 });
-                video.srcObject = videoStream;
+                video.srcObject = identifyStream;
                 video.classList.add('active');
                 
-                // Wait for camera to initialize
-                await new Promise(resolve => setTimeout(resolve, 1000));
+                // Show capture button, hide identify button
+                document.getElementById('identifyKeyBtn').classList.add('hidden');
+                document.getElementById('captureIdentifyBtn').classList.remove('hidden');
                 
+            } catch (err) {
+                alert('Error accessing camera: ' + err.message);
+            }
+        }
+        
+        async function captureAndIdentify() {
+            const video = document.getElementById('identifyVideo');
+            const canvas = document.getElementById('identifyCanvas');
+            const context = canvas.getContext('2d');
+            const resultsDiv = document.getElementById('identifyResults');
+            
+            try {
                 // Capture photo
                 const maxSize = 200;
                 let width = video.videoWidth;
@@ -451,10 +480,14 @@
                 canvas.classList.add('active');
                 
                 // Stop camera
-                if (videoStream) {
-                    videoStream.getTracks().forEach(track => track.stop());
+                if (identifyStream) {
+                    identifyStream.getTracks().forEach(track => track.stop());
                     video.classList.remove('active');
                 }
+                
+                // Reset buttons
+                document.getElementById('identifyKeyBtn').classList.remove('hidden');
+                document.getElementById('captureIdentifyBtn').classList.add('hidden');
                 
                 // Show loading
                 resultsDiv.innerHTML = '<div class="loading"><div class="spinner"></div><p>Analyzing key...</p></div>';
@@ -476,9 +509,6 @@
                 
             } catch (err) {
                 alert('Error: ' + err.message);
-                if (videoStream) {
-                    videoStream.getTracks().forEach(track => track.stop());
-                }
             }
         }
         
