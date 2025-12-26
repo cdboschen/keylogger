@@ -102,9 +102,9 @@
         .settings-panel {
             position: fixed;
             top: 0;
-            right: -400px;
-            width: 400px;
-            max-width: 90vw;
+            right: -100%;
+            width: 90%;
+            max-width: 600px;
             height: 100vh;
             background: white;
             box-shadow: -5px 0 20px rgba(0,0,0,0.3);
@@ -182,6 +182,65 @@
             font-size: 1.1em;
         }
         
+        .key-grid {
+            display: grid;
+            grid-template-columns: repeat(3, 1fr);
+            gap: 15px;
+            margin-top: 15px;
+        }
+        
+        @media (max-width: 600px) {
+            .key-grid {
+                grid-template-columns: repeat(2, 1fr);
+            }
+        }
+        
+        .key-card {
+            background: #f8f9fa;
+            border-radius: 10px;
+            padding: 15px;
+            text-align: center;
+            box-shadow: 0 2px 5px rgba(0,0,0,0.1);
+            transition: transform 0.2s;
+            cursor: pointer;
+        }
+        
+        .key-card:hover {
+            transform: translateY(-3px);
+            box-shadow: 0 4px 10px rgba(0,0,0,0.15);
+        }
+        
+        .key-card img {
+            width: 100%;
+            height: 120px;
+            object-fit: cover;
+            border-radius: 8px;
+            margin-bottom: 10px;
+        }
+        
+        .key-card-label {
+            font-weight: 600;
+            color: #667eea;
+            font-size: 14px;
+            margin-bottom: 5px;
+            word-wrap: break-word;
+        }
+        
+        .key-card-date {
+            font-size: 11px;
+            color: #999;
+            margin-bottom: 8px;
+        }
+        
+        .key-card-notes {
+            font-size: 11px;
+            color: #666;
+            margin-bottom: 10px;
+            max-height: 40px;
+            overflow: hidden;
+            text-overflow: ellipsis;
+        }
+        
         .container {
             max-width: 800px;
             margin: 0 auto;
@@ -226,6 +285,11 @@
             transform: translateY(0);
         }
         
+        .small-btn {
+            padding: 8px 16px;
+            font-size: 12px;
+        }
+        
         input[type="text"] {
             width: 100%;
             padding: 12px;
@@ -266,77 +330,14 @@
             display: block;
         }
         
-        .key-item {
-            background: white;
-            padding: 15px;
-            margin: 10px 0;
-            border-radius: 10px;
-            box-shadow: 0 2px 10px rgba(0,0,0,0.1);
-        }
-        
-        .key-item-header {
-            display: flex;
-            justify-content: space-between;
-            align-items: center;
-            cursor: pointer;
-            padding: 10px;
-            background: #f8f9fa;
-            border-radius: 8px;
-            margin-bottom: 10px;
-        }
-        
-        .key-item-header:hover {
-            background: #e9ecef;
-        }
-        
-        .key-item-title {
-            display: flex;
-            align-items: center;
-            gap: 10px;
-        }
-        
-        .expand-icon {
-            transition: transform 0.3s;
-            font-size: 20px;
-            color: #667eea;
-        }
-        
-        .expand-icon.expanded {
-            transform: rotate(90deg);
-        }
-        
-        .key-item-details {
-            display: none;
-            padding: 10px;
-        }
-        
-        .key-item-details.visible {
-            display: block;
-        }
-        
-        .key-item img {
-            max-width: 200px;
-            border-radius: 8px;
-            margin: 10px 0;
-        }
-        
-        .key-item h3 {
-            color: #667eea;
-            margin-bottom: 10px;
-        }
-        
         .delete-btn {
             background: #e74c3c;
             padding: 8px 16px;
-            font-size: 14px;
+            font-size: 12px;
         }
         
         .delete-btn:hover {
             background: #c0392b;
-        }
-        
-        #keyList {
-            margin-top: 20px;
         }
         
         .match-result {
@@ -458,6 +459,17 @@
             border-radius: 5px;
             font-size: 11px;
         }
+        
+        .empty-state {
+            text-align: center;
+            padding: 40px 20px;
+            color: #999;
+        }
+        
+        .empty-state-icon {
+            font-size: 48px;
+            margin-bottom: 15px;
+        }
     </style>
 </head>
 <body>
@@ -471,6 +483,12 @@
             <button class="close-settings" onclick="closeSettings()">×</button>
         </div>
         <div class="settings-content">
+            <div class="settings-section">
+                <h3>🔑 Stored Keys</h3>
+                <p style="font-size: 13px; color: #666; margin-bottom: 10px;">View and manage your saved keys</p>
+                <div id="keyGrid"></div>
+            </div>
+            
             <div class="settings-section">
                 <h3>🔧 API Configuration</h3>
                 <p style="font-size: 13px; color: #666; margin-bottom: 10px;">Configure your Vercel API endpoint for AI-powered matching</p>
@@ -510,7 +528,7 @@
                 <path d="M19.14,12.94c0.04-0.3,0.06-0.61,0.06-0.94c0-0.32-0.02-0.64-0.07-0.94l2.03-1.58c0.18-0.14,0.23-0.41,0.12-0.61 l-1.92-3.32c-0.12-0.22-0.37-0.29-0.59-0.22l-2.39,0.96c-0.5-0.38-1.03-0.7-1.62-0.94L14.4,2.81c-0.04-0.24-0.24-0.41-0.48-0.41 h-3.84c-0.24,0-0.43,0.17-0.47,0.41L9.25,5.35C8.66,5.59,8.12,5.92,7.63,6.29L5.24,5.33c-0.22-0.08-0.47,0-0.59,0.22L2.74,8.87 C2.62,9.08,2.66,9.34,2.86,9.48l2.03,1.58C4.84,11.36,4.8,11.69,4.8,12s0.02,0.64,0.07,0.94l-2.03,1.58 c-0.18,0.14-0.23,0.41-0.12,0.61l1.92,3.32c0.12,0.22,0.37,0.29,0.59,0.22l2.39-0.96c0.5,0.38,1.03,0.7,1.62,0.94l0.36,2.54 c0.05,0.24,0.24,0.41,0.48,0.41h3.84c0.24,0,0.44-0.17,0.47-0.41l0.36-2.54c0.59-0.24,1.13-0.56,1.62-0.94l2.39,0.96 c0.22,0.08,0.47,0,0.59-0.22l1.92-3.32c0.12-0.22,0.07-0.47-0.12-0.61L19.14,12.94z M12,15.6c-1.98,0-3.6-1.62-3.6-3.6 s1.62-3.6,3.6-3.6s3.6,1.62,3.6,3.6S13.98,15.6,12,15.6z"/>
             </svg>
         </div>
-        <div class="version-badge">v241226.14</div>
+        <div class="version-badge">v241226.15</div>
     </div>
     
     <div class="container">
@@ -543,16 +561,10 @@
                 🤖 <strong>AI Analysis:</strong> Claude AI compares teeth patterns only - ignoring color, material, and key shape.
             </div>
         </div>
-        
-        <div class="section">
-            <h2>Stored Keys</h2>
-            <button onclick="loadKeys()">Refresh List</button>
-            <div id="keyList"></div>
-        </div>
     </div>
 
     <script>
-        const APP_VERSION = "241226.14";
+        const APP_VERSION = "241226.15";
         
         const manifestData = {
             "name": "Key Finder",
@@ -593,25 +605,12 @@
         function openSettings() {
             document.getElementById('settingsPanel').classList.add('open');
             document.getElementById('settingsOverlay').classList.add('visible');
+            loadKeys(); // Refresh keys when opening settings
         }
         
         function closeSettings() {
             document.getElementById('settingsPanel').classList.remove('open');
             document.getElementById('settingsOverlay').classList.remove('visible');
-        }
-        
-        // Toggle key item details
-        function toggleKeyDetails(id) {
-            const detailsElement = document.getElementById('details-' + id);
-            const iconElement = document.getElementById('icon-' + id);
-            
-            if (detailsElement.classList.contains('visible')) {
-                detailsElement.classList.remove('visible');
-                iconElement.classList.remove('expanded');
-            } else {
-                detailsElement.classList.add('visible');
-                iconElement.classList.add('expanded');
-            }
         }
         
         // Load saved API endpoint
@@ -755,7 +754,7 @@
                     
                     capturedImage = null;
                     alert('Key saved successfully!');
-                    loadKeys();
+                    updateStorageInfo();
                 };
                 
                 request.onerror = () => {
@@ -933,31 +932,32 @@
         
         async function loadKeys() {
             const keys = await getAllKeys();
-            const keyList = document.getElementById('keyList');
+            const keyGrid = document.getElementById('keyGrid');
             
             if (keys.length === 0) {
-                keyList.innerHTML = '<p>No keys stored yet.</p>';
+                keyGrid.innerHTML = `
+                    <div class="empty-state">
+                        <div class="empty-state-icon">🔑</div>
+                        <p>No keys stored yet</p>
+                    </div>
+                `;
                 updateStorageInfo();
                 return;
             }
             
-            keyList.innerHTML = keys.map(key => `
-                <div class="key-item">
-                    <div class="key-item-header" onclick="toggleKeyDetails(${key.id})">
-                        <div class="key-item-title">
-                            <span class="expand-icon" id="icon-${key.id}">▶</span>
-                            <strong>${key.label}</strong>
+            keyGrid.innerHTML = `
+                <div class="key-grid">
+                    ${keys.map(key => `
+                        <div class="key-card">
+                            <img src="${key.image}" alt="${key.label}">
+                            <div class="key-card-label">${key.label}</div>
+                            <div class="key-card-date">${new Date(key.timestamp).toLocaleDateString()}</div>
+                            ${key.notes ? `<div class="key-card-notes">${key.notes}</div>` : ''}
+                            <button class="delete-btn small-btn" onclick="deleteKey(${key.id})">Delete</button>
                         </div>
-                        <span style="font-size: 12px; color: #999;">${new Date(key.timestamp).toLocaleDateString()}</span>
-                    </div>
-                    <div class="key-item-details" id="details-${key.id}">
-                        ${key.notes ? `<p><strong>Notes:</strong> ${key.notes}</p>` : ''}
-                        <img src="${key.image}" alt="${key.label}">
-                        <br>
-                        <button class="delete-btn" onclick="deleteKey(${key.id})">Delete</button>
-                    </div>
+                    `).join('')}
                 </div>
-            `).join('');
+            `;
             
             updateStorageInfo();
         }
@@ -989,7 +989,6 @@
                 });
                 
                 loadKeys();
-                closeSettings();
                 alert('All keys have been deleted.');
             }
         }
@@ -1049,7 +1048,6 @@
                     }
                     
                     transaction.oncomplete = () => {
-                        closeSettings();
                         alert(`Imported ${count} keys successfully!`);
                         loadKeys();
                     };
@@ -1065,7 +1063,7 @@
         
         window.onload = async () => {
             await initDB();
-            loadKeys();
+            updateStorageInfo();
         };
     </script>
 </body>
