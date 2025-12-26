@@ -31,27 +31,169 @@
             overflow-x: hidden;
         }
         
-        .header-controls {
-            position: fixed;
-            top: 10px;
-            right: 10px;
-            z-index: 1000;
-        }
-        
-        .refresh-btn {
+        .header {
+            max-width: 800px;
+            margin: 0 auto 20px auto;
             background: white;
-            color: #667eea;
-            border: 2px solid #667eea;
-            padding: 10px 15px;
-            border-radius: 8px;
-            cursor: pointer;
-            font-size: 14px;
-            font-weight: 600;
-            box-shadow: 0 2px 5px rgba(0,0,0,0.2);
+            border-radius: 20px;
+            box-shadow: 0 10px 30px rgba(0,0,0,0.2);
+            padding: 30px;
+            position: relative;
+            display: flex;
+            align-items: center;
+            gap: 20px;
         }
         
-        .refresh-btn:active {
-            transform: scale(0.95);
+        .header-avatar {
+            width: 100px;
+            height: 100px;
+            border-radius: 50%;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 50px;
+            flex-shrink: 0;
+            box-shadow: 0 5px 15px rgba(0,0,0,0.2);
+            position: relative;
+            overflow: hidden;
+        }
+        
+        .avatar-svg {
+            width: 100%;
+            height: 100%;
+        }
+        
+        .header-content {
+            flex: 1;
+        }
+        
+        .header-title {
+            font-size: 2em;
+            color: #333;
+            margin-bottom: 5px;
+            font-weight: 700;
+        }
+        
+        .header-subtitle {
+            color: #666;
+            font-size: 0.9em;
+        }
+        
+        .settings-icon {
+            position: absolute;
+            top: 20px;
+            right: 20px;
+            width: 40px;
+            height: 40px;
+            background: #f8f9fa;
+            border-radius: 50%;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            cursor: pointer;
+            transition: all 0.3s;
+            border: 2px solid transparent;
+        }
+        
+        .settings-icon:hover {
+            background: #667eea;
+            border-color: #667eea;
+            transform: rotate(90deg);
+        }
+        
+        .settings-icon:hover svg {
+            fill: white;
+        }
+        
+        .settings-icon svg {
+            width: 24px;
+            height: 24px;
+            fill: #667eea;
+            transition: fill 0.3s;
+        }
+        
+        .settings-panel {
+            position: fixed;
+            top: 0;
+            right: -400px;
+            width: 400px;
+            max-width: 90vw;
+            height: 100vh;
+            background: white;
+            box-shadow: -5px 0 20px rgba(0,0,0,0.3);
+            transition: right 0.3s ease;
+            z-index: 2000;
+            overflow-y: auto;
+        }
+        
+        .settings-panel.open {
+            right: 0;
+        }
+        
+        .settings-overlay {
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background: rgba(0,0,0,0.5);
+            opacity: 0;
+            pointer-events: none;
+            transition: opacity 0.3s;
+            z-index: 1999;
+        }
+        
+        .settings-overlay.visible {
+            opacity: 1;
+            pointer-events: auto;
+        }
+        
+        .settings-header {
+            padding: 25px;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+        
+        .settings-header h2 {
+            font-size: 1.5em;
+        }
+        
+        .close-settings {
+            background: none;
+            border: none;
+            color: white;
+            font-size: 30px;
+            cursor: pointer;
+            padding: 0;
+            width: 30px;
+            height: 30px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+        }
+        
+        .settings-content {
+            padding: 25px;
+        }
+        
+        .settings-section {
+            margin-bottom: 30px;
+            padding-bottom: 25px;
+            border-bottom: 1px solid #e0e0e0;
+        }
+        
+        .settings-section:last-child {
+            border-bottom: none;
+        }
+        
+        .settings-section h3 {
+            color: #667eea;
+            margin-bottom: 15px;
+            font-size: 1.1em;
         }
         
         .container {
@@ -61,29 +203,6 @@
             border-radius: 20px;
             box-shadow: 0 20px 60px rgba(0,0,0,0.3);
             padding: 40px;
-        }
-        
-        h1 {
-            color: #333;
-            text-align: center;
-            margin-bottom: 5px;
-            font-size: 2.5em;
-            display: flex;
-            align-items: center;
-            justify-content: center;
-            gap: 15px;
-        }
-        
-        .version-header {
-            text-align: center;
-            color: #999;
-            font-size: 14px;
-            margin-bottom: 25px;
-        }
-        
-        .key-icon {
-            width: 50px;
-            height: 50px;
         }
         
         .section {
@@ -259,12 +378,6 @@
             color: #1976d2;
         }
         
-        .export-section {
-            margin-top: 15px;
-            padding-top: 15px;
-            border-top: 2px solid #ddd;
-        }
-        
         .hidden {
             display: none;
         }
@@ -290,19 +403,6 @@
             font-weight: 600;
         }
         
-        .api-config {
-            background: #fff3cd;
-            padding: 15px;
-            border-radius: 8px;
-            margin-top: 15px;
-            border-left: 4px solid #ffc107;
-        }
-        
-        .api-config input {
-            width: 100%;
-            margin-top: 10px;
-        }
-        
         .api-status {
             margin-top: 10px;
             padding: 10px;
@@ -321,33 +421,105 @@
             color: #721c24;
             border: 1px solid #f5c6cb;
         }
+        
+        .version-badge {
+            position: absolute;
+            bottom: 10px;
+            right: 10px;
+            background: rgba(102, 126, 234, 0.1);
+            color: #667eea;
+            padding: 5px 10px;
+            border-radius: 5px;
+            font-size: 11px;
+        }
     </style>
 </head>
 <body>
-    <div class="header-controls">
-        <button class="refresh-btn" onclick="location.reload()">🔄 Refresh</button>
+    <!-- Settings Overlay -->
+    <div class="settings-overlay" id="settingsOverlay" onclick="closeSettings()"></div>
+    
+    <!-- Settings Panel -->
+    <div class="settings-panel" id="settingsPanel">
+        <div class="settings-header">
+            <h2>Settings</h2>
+            <button class="close-settings" onclick="closeSettings()">×</button>
+        </div>
+        <div class="settings-content">
+            <div class="settings-section">
+                <h3>🔧 API Configuration</h3>
+                <p style="font-size: 13px; color: #666; margin-bottom: 10px;">Configure your Vercel API endpoint for AI-powered matching</p>
+                <input type="text" id="apiEndpoint" placeholder="https://key-matcher-api.vercel.app/api/compare-keys">
+                <button onclick="saveApiEndpoint()">Save Endpoint</button>
+                <div id="apiStatus" class="api-status hidden"></div>
+            </div>
+            
+            <div class="settings-section">
+                <h3>💾 Backup & Restore</h3>
+                <p style="font-size: 13px; color: #666; margin-bottom: 10px;">Export or import your key database</p>
+                <button onclick="exportKeys()">📤 Export Keys</button>
+                <button onclick="document.getElementById('importFile').click()">📥 Import Keys</button>
+                <input type="file" id="importFile" accept=".json" style="display: none;" onchange="importKeys(event)">
+            </div>
+            
+            <div class="settings-section">
+                <h3>⚠️ Danger Zone</h3>
+                <p style="font-size: 13px; color: #666; margin-bottom: 10px;">Permanently delete all stored keys</p>
+                <button onclick="clearAllKeys()" class="delete-btn">🗑️ Clear All Keys</button>
+            </div>
+        </div>
+    </div>
+    
+    <!-- Header with Avatar -->
+    <div class="header">
+        <div class="header-avatar">
+            <svg class="avatar-svg" viewBox="0 0 200 200" xmlns="http://www.w3.org/2000/svg">
+                <!-- Background circle -->
+                <circle cx="100" cy="100" r="100" fill="#667eea"/>
+                
+                <!-- Head -->
+                <ellipse cx="100" cy="85" rx="45" ry="55" fill="#f4c2a0"/>
+                
+                <!-- Hair -->
+                <path d="M 55 60 Q 55 30 80 25 Q 100 20 120 25 Q 145 30 145 60 L 140 70 Q 135 45 120 40 Q 105 35 100 35 Q 95 35 80 40 Q 65 45 60 70 Z" fill="#5c4033"/>
+                
+                <!-- Goatee -->
+                <ellipse cx="100" cy="125" rx="8" ry="12" fill="#5c4033"/>
+                
+                <!-- Eyes -->
+                <circle cx="85" cy="85" r="3" fill="#333"/>
+                <circle cx="115" cy="85" r="3" fill="#333"/>
+                
+                <!-- Smile -->
+                <path d="M 80 105 Q 100 115 120 105" stroke="#333" stroke-width="2" fill="none"/>
+                
+                <!-- Shirt -->
+                <rect x="50" y="140" width="100" height="60" fill="#87CEEB"/>
+                
+                <!-- Tie -->
+                <polygon points="100,140 95,140 90,200 110,200 105,140" fill="#1a1a1a"/>
+                
+                <!-- Key in hand -->
+                <g transform="translate(130, 160) rotate(-30)">
+                    <rect x="0" y="0" width="30" height="8" rx="4" fill="#FFD700"/>
+                    <circle cx="5" cy="4" r="3" fill="#FFD700" stroke="#DAA520" stroke-width="1"/>
+                    <rect x="25" y="-2" width="3" height="4" fill="#FFD700"/>
+                    <rect x="25" y="6" width="3" height="4" fill="#FFD700"/>
+                </g>
+            </svg>
+        </div>
+        <div class="header-content">
+            <div class="header-title">Key Identifier</div>
+            <div class="header-subtitle">AI-Powered Key Recognition System</div>
+        </div>
+        <div class="settings-icon" onclick="openSettings()">
+            <svg viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
+                <path d="M19.14,12.94c0.04-0.3,0.06-0.61,0.06-0.94c0-0.32-0.02-0.64-0.07-0.94l2.03-1.58c0.18-0.14,0.23-0.41,0.12-0.61 l-1.92-3.32c-0.12-0.22-0.37-0.29-0.59-0.22l-2.39,0.96c-0.5-0.38-1.03-0.7-1.62-0.94L14.4,2.81c-0.04-0.24-0.24-0.41-0.48-0.41 h-3.84c-0.24,0-0.43,0.17-0.47,0.41L9.25,5.35C8.66,5.59,8.12,5.92,7.63,6.29L5.24,5.33c-0.22-0.08-0.47,0-0.59,0.22L2.74,8.87 C2.62,9.08,2.66,9.34,2.86,9.48l2.03,1.58C4.84,11.36,4.8,11.69,4.8,12s0.02,0.64,0.07,0.94l-2.03,1.58 c-0.18,0.14-0.23,0.41-0.12,0.61l1.92,3.32c0.12,0.22,0.37,0.29,0.59,0.22l2.39-0.96c0.5,0.38,1.03,0.7,1.62,0.94l0.36,2.54 c0.05,0.24,0.24,0.41,0.48,0.41h3.84c0.24,0,0.44-0.17,0.47-0.41l0.36-2.54c0.59-0.24,1.13-0.56,1.62-0.94l2.39,0.96 c0.22,0.08,0.47,0,0.59-0.22l1.92-3.32c0.12-0.22,0.07-0.47-0.12-0.61L19.14,12.94z M12,15.6c-1.98,0-3.6-1.62-3.6-3.6 s1.62-3.6,3.6-3.6s3.6,1.62,3.6,3.6S13.98,15.6,12,15.6z"/>
+            </svg>
+        </div>
+        <div class="version-badge">v241226.12</div>
     </div>
     
     <div class="container">
-        <h1>
-            <svg class="key-icon" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg" fill="#f39c12">
-                <path d="M12.65 10C11.83 7.67 9.61 6 7 6c-3.31 0-6 2.69-6 6s2.69 6 6 6c2.61 0 4.83-1.67 5.65-4H17v4h4v-4h2v-4H12.65zM7 14c-1.1 0-2-.9-2-2s.9-2 2-2 2 .9 2 2-.9 2-2 2z"/>
-            </svg>
-            Key Identification System
-        </h1>
-        <div class="version-header">v241226.11</div>
-        
-        <div class="section">
-            <h2>⚙️ API Configuration</h2>
-            <div class="api-config">
-                <p><strong>Enter your API endpoint URL:</strong></p>
-                <p style="font-size: 12px; color: #856404; margin-top: 5px;">Your Vercel API endpoint (ends with /api/compare-keys)</p>
-                <input type="text" id="apiEndpoint" placeholder="https://key-matcher-api.vercel.app/api/compare-keys" value="">
-                <button onclick="saveApiEndpoint()" style="margin-top: 10px;">Save Endpoint</button>
-                <div id="apiStatus" class="api-status hidden"></div>
-            </div>
-        </div>
-        
         <div class="section">
             <h2>Add New Key</h2>
             <input type="text" id="keyLabel" placeholder="Enter key label (e.g., 'Front Door', 'Car Key')">
@@ -359,7 +531,7 @@
                 <button id="captureBtn" class="hidden" onclick="captureAndSave()">Capture Photo</button>
             </div>
             <div class="tip">
-                📸 <strong>Tip:</strong> Photograph keys on a plain contrasting background with the blade clearly visible.
+                📸 <strong>Tip:</strong> Photograph the key blade clearly against a contrasting background. Focus on the teeth/cuts.
             </div>
             <div class="storage-info" id="storageInfo"></div>
         </div>
@@ -374,27 +546,19 @@
                 <button id="captureIdentifyBtn" class="hidden" onclick="captureAndIdentify()">Capture Photo</button>
             </div>
             <div class="tip">
-                🤖 <strong>AI Matching:</strong> Uses Claude AI to analyze tooth patterns and blade shapes for accurate identification.
+                🤖 <strong>AI Analysis:</strong> Claude AI compares teeth patterns only - ignoring color, material, and key shape.
             </div>
         </div>
         
         <div class="section">
             <h2>Stored Keys</h2>
             <button onclick="loadKeys()">Refresh List</button>
-            <button onclick="clearAllKeys()" class="delete-btn">Clear All Keys</button>
             <div id="keyList"></div>
-            
-            <div class="export-section">
-                <h3 style="color: #667eea; margin-bottom: 10px;">Backup & Restore</h3>
-                <button onclick="exportKeys()">Export Keys</button>
-                <button onclick="document.getElementById('importFile').click()">Import Keys</button>
-                <input type="file" id="importFile" accept=".json" style="display: none;" onchange="importKeys(event)">
-            </div>
         </div>
     </div>
 
     <script>
-        const APP_VERSION = "241226.11";
+        const APP_VERSION = "241226.12";
         
         const manifestData = {
             "name": "Key Identification System",
@@ -430,6 +594,17 @@
         let capturedImage = null;
         let identifyImage = null;
         let db;
+        
+        // Settings panel functions
+        function openSettings() {
+            document.getElementById('settingsPanel').classList.add('open');
+            document.getElementById('settingsOverlay').classList.add('visible');
+        }
+        
+        function closeSettings() {
+            document.getElementById('settingsPanel').classList.remove('open');
+            document.getElementById('settingsOverlay').classList.remove('visible');
+        }
         
         // Load saved API endpoint
         const savedEndpoint = localStorage.getItem('apiEndpoint');
@@ -613,7 +788,7 @@
             
             const apiEndpoint = localStorage.getItem('apiEndpoint');
             if (!apiEndpoint) {
-                alert('Please configure your API endpoint first in the settings above');
+                alert('Please configure your API endpoint first. Click the settings icon in the top right.');
                 return;
             }
             
@@ -649,7 +824,7 @@
                 document.getElementById('identifyKeyBtn').classList.remove('hidden');
                 document.getElementById('captureIdentifyBtn').classList.add('hidden');
                 
-                resultsDiv.innerHTML = '<div class="loading"><div class="spinner"></div><p>Analyzing with AI...</p></div>';
+                resultsDiv.innerHTML = '<div class="loading"><div class="spinner"></div><p>Analyzing tooth pattern with AI...</p></div>';
                 
                 await initDB();
                 const keys = await getAllKeys();
@@ -676,7 +851,7 @@
                 }
                 
                 const data = await response.json();
-                console.log('API Response:', data); // Debug logging
+                console.log('API Response:', data);
                 
                 const aiResults = data.results || [];
                 
@@ -689,7 +864,7 @@
                         reasoning: result.reasoning || 'No reasoning provided'
                     }));
                 
-                console.log('Mapped matches:', matches); // Debug logging
+                console.log('Mapped matches:', matches);
                 
                 if (matches.length === 0) {
                     resultsDiv.innerHTML = '<div class="no-match">API returned no valid matches. Check the browser console for details.</div>';
@@ -699,7 +874,7 @@
                 displayMatches(matches, resultsDiv);
                 
             } catch (err) {
-                resultsDiv.innerHTML = `<div class="no-match">❌ Error: ${err.message}<br><br>Make sure your API endpoint is configured correctly.</div>`;
+                resultsDiv.innerHTML = `<div class="no-match">❌ Error: ${err.message}<br><br>Make sure your API endpoint is configured correctly in Settings.</div>`;
                 console.error(err);
             }
         }
@@ -800,6 +975,7 @@
                 });
                 
                 loadKeys();
+                closeSettings();
                 alert('All keys have been deleted.');
             }
         }
@@ -859,6 +1035,7 @@
                     }
                     
                     transaction.oncomplete = () => {
+                        closeSettings();
                         alert(`Imported ${count} keys successfully!`);
                         loadKeys();
                     };
@@ -879,4 +1056,3 @@
     </script>
 </body>
 </html>
-
