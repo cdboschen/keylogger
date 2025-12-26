@@ -274,6 +274,16 @@
         .hidden {
             display: none;
         }
+        
+        .tip {
+            background: #e3f2fd;
+            padding: 15px;
+            border-radius: 8px;
+            margin-top: 15px;
+            font-size: 13px;
+            color: #1976d2;
+            border-left: 4px solid #667eea;
+        }
     </style>
 </head>
 <body>
@@ -289,7 +299,7 @@
             </svg>
             Key Identification System
         </h1>
-        <div class="version-header">v241226.06</div>
+        <div class="version-header">v241226.07</div>
         
         <div class="section">
             <h2>Add New Key</h2>
@@ -300,6 +310,9 @@
             <div>
                 <button id="addKeyBtn" onclick="startAddKey()">Add Key</button>
                 <button id="captureBtn" class="hidden" onclick="captureAndSave()">Capture Photo</button>
+            </div>
+            <div class="tip">
+                📸 <strong>Tip:</strong> For best results, photograph keys on a plain background with good lighting. Try to keep the key horizontal and fill most of the frame.
             </div>
             <div class="storage-info" id="storageInfo"></div>
         </div>
@@ -312,6 +325,9 @@
             <div>
                 <button id="identifyKeyBtn" onclick="startIdentify()">Identify Key</button>
                 <button id="captureIdentifyBtn" class="hidden" onclick="captureAndIdentify()">Capture Photo</button>
+            </div>
+            <div class="tip">
+                💡 <strong>Note:</strong> Matching works best when keys are photographed in similar positions and lighting. The algorithm compares the unique tooth pattern of each key.
             </div>
         </div>
         
@@ -331,8 +347,8 @@
     </div>
 
     <script>
-        // Version: 241226.06 (YYMMDD.XX) - Enhanced local matching algorithm
-        const APP_VERSION = "241226.06";
+        // Version: 241226.07 (YYMMDD.XX) - Perceptual hash matching
+        const APP_VERSION = "241226.07";
         
         // Pull-to-refresh functionality
         let touchStartY = 0;
@@ -401,7 +417,7 @@
         
         async function initDB() {
             return new Promise((resolve, reject) => {
-                const request = indexedDB.open('KeyDatabase', 1);
+                const request = indexedDB.open('KeyDatabase', 2); // Bumped version for hash storage
                 
                 request.onerror = () => {
                     console.error('DB error:', request.error);
@@ -422,6 +438,64 @@
                     }
                 };
             });
+        }
+        
+        // Compute perceptual hash (pHash) for image comparison
+        function computePerceptualHash(imageData) {
+            const size = 32; // Use 32x32 for hash computation
+            const canvas = document.createElement('canvas');
+            const ctx = canvas.getContext('2d');
+            canvas.width = size;
+            canvas.height = size;
+            
+            const img = new Image();
+            img.src = imageData;
+            
+            return new Promise((resolve) => {
+                img.onload = () => {
+                    ctx.drawImage(img, 0, 0, size, size);
+                    const data = ctx.getImageData(0, 0, size, size).data;
+                    
+                    // Convert to grayscale
+                    const gray = [];
+                    for (let i = 0; i < data.length; i += 4) {
+                        gray.push(data[i] * 0.299 + data[i + 1] * 0.587 + data[i + 2] * 0.114);
+                    }
+                    
+                    // Compute DCT (Discrete Cosine Transform) - simplified version
+                    const dct = [];
+                    for (let u = 0; u < 8; u++) {
+                        for (let v = 0; v < 8; v++) {
+                            let sum = 0;
+                            for (let x = 0; x < size; x++) {
+                                for (let y = 0; y < size; y++) {
+                                    sum += gray[y * size + x] *
+                                           Math.cos((2 * x + 1) * u * Math.PI / (2 * size)) *
+                                           Math.cos((2 * y + 1) * v * Math.PI / (2 * size));
+                                }
+                            }
+                            dct.push(sum);
+                        }
+                    }
+                    
+                    // Get average (excluding DC component)
+                    const avg = dct.slice(1).reduce((a, b) => a + b, 0) / (dct.length - 1);
+                    
+                    // Create hash based on whether values are above average
+                    const hash = dct.slice(1).map(v => v > avg ? 1 : 0);
+                    
+                    resolve(hash);
+                };
+            });
+        }
+        
+        // Hamming distance between two hashes
+        function hammingDistance(hash1, hash2) {
+            let distance = 0;
+            for (let i = 0; i < hash1.length; i++) {
+                if (hash1[i] !== hash2[i]) distance++;
+            }
+            return distance;
         }
         
         async function startAddKey() {
@@ -457,7 +531,7 @@
             const context = canvas.getContext('2d');
             
             try {
-                const maxSize = 300;
+                const maxSize = 400;
                 let width = video.videoWidth;
                 let height = video.videoHeight;
                 
@@ -488,7 +562,7 @@
                 }
                 context.putImageData(imageData, 0, 0);
                 
-                capturedImage = canvas.toDataURL('image/jpeg', 0.6);
+                capturedImage = canvas.toDataURL('image/jpeg', 0.7);
                 canvas.classList.add('active');
                 
                 if (videoStream) {
@@ -499,6 +573,9 @@
                 document.getElementById('addKeyBtn').classList.remove('hidden');
                 document.getElementById('captureBtn').classList.add('hidden');
                 
+                // Compute perceptual hash
+                const hash = await computePerceptualHash(capturedImage);
+                
                 await initDB();
                 
                 const key = {
@@ -506,6 +583,7 @@
                     label: label,
                     notes: notes,
                     image: capturedImage,
+                    hash: hash, // Store the hash
                     timestamp: new Date().toISOString()
                 };
                 
@@ -568,7 +646,7 @@
             const resultsDiv = document.getElementById('identifyResults');
             
             try {
-                const maxSize = 300;
+                const maxSize = 400;
                 let width = video.videoWidth;
                 let height = video.videoHeight;
                 
@@ -598,7 +676,7 @@
                 }
                 context.putImageData(imageData, 0, 0);
                 
-                identifyImage = canvas.toDataURL('image/jpeg', 0.6);
+                identifyImage = canvas.toDataURL('image/jpeg', 0.7);
                 canvas.classList.add('active');
                 
                 if (identifyStream) {
@@ -611,6 +689,9 @@
                 
                 resultsDiv.innerHTML = '<div class="loading"><div class="spinner"></div><p>Analyzing key...</p></div>';
                 
+                // Compute hash for captured image
+                const capturedHash = await computePerceptualHash(identifyImage);
+                
                 await initDB();
                 const keys = await getAllKeys();
                 
@@ -619,7 +700,7 @@
                     return;
                 }
                 
-                const matches = await compareWithStoredKeys(identifyImage, keys);
+                const matches = await compareWithStoredKeys(capturedHash, keys);
                 displayMatches(matches, resultsDiv);
                 
             } catch (err) {
@@ -642,11 +723,25 @@
             });
         }
         
-        async function compareWithStoredKeys(capturedImage, storedKeys) {
+        async function compareWithStoredKeys(capturedHash, storedKeys) {
             const matches = [];
             
             for (const key of storedKeys) {
-                const similarity = await compareImagesEnhanced(capturedImage, key.image);
+                // If key doesn't have hash (old format), compute it
+                if (!key.hash) {
+                    key.hash = await computePerceptualHash(key.image);
+                }
+                
+                // Calculate Hamming distance
+                const distance = hammingDistance(capturedHash, key.hash);
+                
+                // Convert to similarity score (0-100)
+                // Lower distance = higher similarity
+                const maxDistance = capturedHash.length;
+                const similarity = ((maxDistance - distance) / maxDistance) * 100;
+                
+                console.log(`${key.label}: distance=${distance}, similarity=${similarity.toFixed(1)}%`);
+                
                 matches.push({
                     key: key,
                     similarity: similarity
@@ -655,95 +750,6 @@
             
             matches.sort((a, b) => b.similarity - a.similarity);
             return matches;
-        }
-        
-        // Enhanced comparison with multi-scale analysis
-        async function compareImagesEnhanced(img1Data, img2Data) {
-            return new Promise((resolve) => {
-                const canvas1 = document.createElement('canvas');
-                const canvas2 = document.createElement('canvas');
-                const ctx1 = canvas1.getContext('2d');
-                const ctx2 = canvas2.getContext('2d');
-                
-                const img1 = new Image();
-                const img2 = new Image();
-                
-                let loaded = 0;
-                
-                function checkLoaded() {
-                    loaded++;
-                    if (loaded === 2) {
-                        // Test multiple orientations and scales
-                        const testConfigs = [
-                            { rotate: 0, flip: false, scale: 1.0 },
-                            { rotate: 180, flip: false, scale: 1.0 },
-                            { rotate: 0, flip: true, scale: 1.0 },
-                            { rotate: 180, flip: true, scale: 1.0 }
-                        ];
-                        
-                        let bestSimilarity = 0;
-                        
-                        for (const config of testConfigs) {
-                            const size = 150;
-                            canvas1.width = canvas2.width = size;
-                            canvas1.height = canvas2.height = size;
-                            
-                            // Draw first image
-                            ctx1.clearRect(0, 0, size, size);
-                            ctx1.drawImage(img1, 0, 0, size, size);
-                            
-                            // Draw second image with transform
-                            ctx2.clearRect(0, 0, size, size);
-                            ctx2.save();
-                            ctx2.translate(size / 2, size / 2);
-                            if (config.rotate) ctx2.rotate((config.rotate * Math.PI) / 180);
-                            if (config.flip) ctx2.scale(-1, 1);
-                            ctx2.drawImage(img2, -size / 2, -size / 2, size, size);
-                            ctx2.restore();
-                            
-                            const data1 = ctx1.getImageData(0, 0, size, size).data;
-                            const data2 = ctx2.getImageData(0, 0, size, size).data;
-                            
-                            // Compute structural similarity (focus on edges/patterns)
-                            let structuralSim = 0;
-                            let edgeCount = 0;
-                            
-                            for (let y = 1; y < size - 1; y++) {
-                                for (let x = 1; x < size - 1; x++) {
-                                    const idx = (y * size + x) * 4;
-                                    
-                                    // Detect edges in both images
-                                    const edge1 = Math.abs(data1[idx] - data1[idx - 4]) + 
-                                                 Math.abs(data1[idx] - data1[idx + 4]) +
-                                                 Math.abs(data1[idx] - data1[idx - size * 4]) +
-                                                 Math.abs(data1[idx] - data1[idx + size * 4]);
-                                    
-                                    const edge2 = Math.abs(data2[idx] - data2[idx - 4]) + 
-                                                 Math.abs(data2[idx] - data2[idx + 4]) +
-                                                 Math.abs(data2[idx] - data2[idx - size * 4]) +
-                                                 Math.abs(data2[idx] - data2[idx + size * 4]);
-                                    
-                                    if (edge1 > 100 || edge2 > 100) {
-                                        edgeCount++;
-                                        const edgeDiff = Math.abs(edge1 - edge2);
-                                        structuralSim += Math.max(0, 500 - edgeDiff) / 500;
-                                    }
-                                }
-                            }
-                            
-                            const similarity = edgeCount > 0 ? (structuralSim / edgeCount) * 100 : 0;
-                            bestSimilarity = Math.max(bestSimilarity, similarity);
-                        }
-                        
-                        resolve(bestSimilarity);
-                    }
-                }
-                
-                img1.onload = checkLoaded;
-                img2.onload = checkLoaded;
-                img1.src = img1Data;
-                img2.src = img2Data;
-            });
         }
         
         function displayMatches(matches, resultsDiv) {
@@ -756,7 +762,7 @@
             const topMatches = matches.slice(0, 3);
             
             topMatches.forEach((match, index) => {
-                const isBestMatch = index === 0 && match.similarity > 65;
+                const isBestMatch = index === 0 && match.similarity > 85;
                 const matchClass = isBestMatch ? 'match-result best-match' : 'match-result';
                 
                 html += `
@@ -771,7 +777,7 @@
                 `;
             });
             
-            if (matches[0].similarity < 65) {
+            if (matches[0].similarity < 85) {
                 html = '<div class="no-match">⚠️ No confident matches found. The best match is only ' + matches[0].similarity.toFixed(1) + '% similar.</div>' + html;
             }
             
