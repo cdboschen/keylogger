@@ -31,33 +31,27 @@
             overflow-x: hidden;
         }
         
-        .pull-to-refresh {
+        .header-controls {
             position: fixed;
-            top: -60px;
-            left: 50%;
-            transform: translateX(-50%);
+            top: 10px;
+            right: 10px;
+            z-index: 1000;
+        }
+        
+        .refresh-btn {
             background: white;
-            padding: 10px 20px;
-            border-radius: 20px;
-            box-shadow: 0 4px 10px rgba(0,0,0,0.2);
-            transition: top 0.3s ease;
-            z-index: 2000;
-            display: flex;
-            align-items: center;
-            gap: 10px;
+            color: #667eea;
+            border: 2px solid #667eea;
+            padding: 10px 15px;
+            border-radius: 8px;
+            cursor: pointer;
+            font-size: 14px;
+            font-weight: 600;
+            box-shadow: 0 2px 5px rgba(0,0,0,0.2);
         }
         
-        .pull-to-refresh.visible {
-            top: 20px;
-        }
-        
-        .pull-to-refresh .spinner-small {
-            border: 3px solid #f3f3f3;
-            border-top: 3px solid #667eea;
-            border-radius: 50%;
-            width: 20px;
-            height: 20px;
-            animation: spin 1s linear infinite;
+        .refresh-btn:active {
+            transform: scale(0.95);
         }
         
         .container {
@@ -285,9 +279,9 @@
             border-left: 4px solid #667eea;
         }
         
-        .edge-badge {
+        .ai-badge {
             display: inline-block;
-            background: linear-gradient(135deg, #2ecc71 0%, #27ae60 100%);
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
             color: white;
             padding: 3px 8px;
             border-radius: 4px;
@@ -295,12 +289,24 @@
             margin-left: 10px;
             font-weight: 600;
         }
+        
+        .api-config {
+            background: #fff3cd;
+            padding: 15px;
+            border-radius: 8px;
+            margin-top: 15px;
+            border-left: 4px solid #ffc107;
+        }
+        
+        .api-config input {
+            width: 100%;
+            margin-top: 10px;
+        }
     </style>
 </head>
 <body>
-    <div class="pull-to-refresh" id="pullToRefresh">
-        <div class="spinner-small"></div>
-        <span>Refreshing...</span>
+    <div class="header-controls">
+        <button class="refresh-btn" onclick="location.reload()">🔄 Refresh</button>
     </div>
     
     <div class="container">
@@ -310,7 +316,17 @@
             </svg>
             Key Identification System
         </h1>
-        <div class="version-header">v241226.09</div>
+        <div class="version-header">v241226.11</div>
+        
+        <div class="section">
+            <h2>⚙️ API Configuration</h2>
+            <div class="api-config">
+                <p><strong>Enter your API endpoint URL:</strong></p>
+                <p style="font-size: 12px; color: #856404; margin-top: 5px;">Deploy the serverless function and enter the URL here (e.g., https://your-app.vercel.app/api/compare-keys)</p>
+                <input type="text" id="apiEndpoint" placeholder="https://your-app.vercel.app/api/compare-keys" value="">
+                <button onclick="saveApiEndpoint()" style="margin-top: 10px;">Save Endpoint</button>
+            </div>
+        </div>
         
         <div class="section">
             <h2>Add New Key</h2>
@@ -323,19 +339,22 @@
                 <button id="captureBtn" class="hidden" onclick="captureAndSave()">Capture Photo</button>
             </div>
             <div class="tip">
-                📸 <strong>Tip:</strong> For best matching, photograph the entire key clearly on a contrasting background.
+                📸 <strong>Tip:</strong> Photograph keys on a plain contrasting background with the blade clearly visible.
             </div>
             <div class="storage-info" id="storageInfo"></div>
         </div>
         
         <div class="section">
-            <h2>Identify Unknown Key <span class="edge-badge">PATTERN MATCH</span></h2>
+            <h2>Identify Unknown Key <span class="ai-badge">AI POWERED</span></h2>
             <video id="identifyVideo" autoplay></video>
             <canvas id="identifyCanvas" class="preview-canvas"></canvas>
             <div id="identifyResults"></div>
             <div>
                 <button id="identifyKeyBtn" onclick="startIdentify()">Identify Key</button>
                 <button id="captureIdentifyBtn" class="hidden" onclick="captureAndIdentify()">Capture Photo</button>
+            </div>
+            <div class="tip">
+                🤖 <strong>AI Matching:</strong> Uses Claude AI to analyze tooth patterns and blade shapes for accurate identification.
             </div>
         </div>
         
@@ -355,37 +374,7 @@
     </div>
 
     <script>
-        // Version: 241226.09 - Simplified robust matching
-        const APP_VERSION = "241226.09";
-        
-        // Pull-to-refresh functionality
-        let touchStartY = 0;
-        let touchEndY = 0;
-        let isPulling = false;
-        
-        document.addEventListener('touchstart', (e) => {
-            touchStartY = e.touches[0].clientY;
-        }, { passive: true });
-        
-        document.addEventListener('touchmove', (e) => {
-            touchEndY = e.touches[0].clientY;
-            const pullDistance = touchEndY - touchStartY;
-            
-            if (window.scrollY === 0 && pullDistance > 80 && !isPulling) {
-                isPulling = true;
-                document.getElementById('pullToRefresh').classList.add('visible');
-            }
-        }, { passive: true });
-        
-        document.addEventListener('touchend', () => {
-            if (isPulling) {
-                setTimeout(() => {
-                    location.reload(true);
-                }, 500);
-            }
-            touchStartY = 0;
-            touchEndY = 0;
-        }, { passive: true });
+        const APP_VERSION = "241226.11";
         
         const manifestData = {
             "name": "Key Identification System",
@@ -422,6 +411,22 @@
         let identifyImage = null;
         let db;
         
+        // Load saved API endpoint
+        const savedEndpoint = localStorage.getItem('apiEndpoint');
+        if (savedEndpoint) {
+            document.getElementById('apiEndpoint').value = savedEndpoint;
+        }
+        
+        function saveApiEndpoint() {
+            const endpoint = document.getElementById('apiEndpoint').value.trim();
+            if (!endpoint) {
+                alert('Please enter an API endpoint URL');
+                return;
+            }
+            localStorage.setItem('apiEndpoint', endpoint);
+            alert('API endpoint saved!');
+        }
+        
         async function initDB() {
             return new Promise((resolve, reject) => {
                 const request = indexedDB.open('KeyDatabase', 4);
@@ -440,98 +445,6 @@
                         db.createObjectStore('keys', { keyPath: 'id' });
                     }
                 };
-            });
-        }
-        
-        // Simplified: Just compare raw pixel similarity with SSIM-like approach
-        async function compareImages(img1Data, img2Data) {
-            return new Promise((resolve) => {
-                const canvas1 = document.createElement('canvas');
-                const canvas2 = document.createElement('canvas');
-                const ctx1 = canvas1.getContext('2d');
-                const ctx2 = canvas2.getContext('2d');
-                
-                const img1 = new Image();
-                const img2 = new Image();
-                
-                let loaded = 0;
-                
-                function checkLoaded() {
-                    loaded++;
-                    if (loaded === 2) {
-                        const size = 128;
-                        canvas1.width = canvas2.width = size;
-                        canvas1.height = canvas2.height = size;
-                        
-                        // Test multiple orientations
-                        const orientations = [
-                            { rotate: 0, flipH: false, flipV: false },
-                            { rotate: 0, flipH: true, flipV: false },
-                            { rotate: 180, flipH: false, flipV: false },
-                            { rotate: 180, flipH: true, flipV: false }
-                        ];
-                        
-                        let bestSimilarity = 0;
-                        
-                        for (const orient of orientations) {
-                            ctx1.clearRect(0, 0, size, size);
-                            ctx1.drawImage(img1, 0, 0, size, size);
-                            
-                            ctx2.clearRect(0, 0, size, size);
-                            ctx2.save();
-                            ctx2.translate(size / 2, size / 2);
-                            if (orient.rotate) ctx2.rotate((orient.rotate * Math.PI) / 180);
-                            if (orient.flipH) ctx2.scale(-1, 1);
-                            if (orient.flipV) ctx2.scale(1, -1);
-                            ctx2.drawImage(img2, -size / 2, -size / 2, size, size);
-                            ctx2.restore();
-                            
-                            const data1 = ctx1.getImageData(0, 0, size, size).data;
-                            const data2 = ctx2.getImageData(0, 0, size, size).data;
-                            
-                            // Convert to grayscale and compute SSIM-like metric
-                            const gray1 = [];
-                            const gray2 = [];
-                            
-                            for (let i = 0; i < data1.length; i += 4) {
-                                gray1.push(data1[i] * 0.299 + data1[i + 1] * 0.587 + data1[i + 2] * 0.114);
-                                gray2.push(data2[i] * 0.299 + data2[i + 1] * 0.587 + data2[i + 2] * 0.114);
-                            }
-                            
-                            // Compute mean and variance
-                            const mean1 = gray1.reduce((a, b) => a + b) / gray1.length;
-                            const mean2 = gray2.reduce((a, b) => a + b) / gray2.length;
-                            
-                            let var1 = 0, var2 = 0, covar = 0;
-                            for (let i = 0; i < gray1.length; i++) {
-                                const diff1 = gray1[i] - mean1;
-                                const diff2 = gray2[i] - mean2;
-                                var1 += diff1 * diff1;
-                                var2 += diff2 * diff2;
-                                covar += diff1 * diff2;
-                            }
-                            var1 /= gray1.length;
-                            var2 /= gray2.length;
-                            covar /= gray1.length;
-                            
-                            const c1 = 6.5025, c2 = 58.5225; // Constants for SSIM
-                            const numerator = (2 * mean1 * mean2 + c1) * (2 * covar + c2);
-                            const denominator = (mean1 * mean1 + mean2 * mean2 + c1) * (var1 + var2 + c2);
-                            
-                            const ssim = numerator / denominator;
-                            const similarity = ((ssim + 1) / 2) * 100; // Convert to 0-100%
-                            
-                            bestSimilarity = Math.max(bestSimilarity, similarity);
-                        }
-                        
-                        resolve(bestSimilarity);
-                    }
-                }
-                
-                img1.onload = checkLoaded;
-                img2.onload = checkLoaded;
-                img1.src = img1Data;
-                img2.src = img2Data;
             });
         }
         
@@ -568,7 +481,7 @@
             const context = canvas.getContext('2d');
             
             try {
-                const maxSize = 400;
+                const maxSize = 800;
                 let width = video.videoWidth;
                 let height = video.videoHeight;
                 
@@ -662,8 +575,14 @@
             const context = canvas.getContext('2d');
             const resultsDiv = document.getElementById('identifyResults');
             
+            const apiEndpoint = localStorage.getItem('apiEndpoint');
+            if (!apiEndpoint) {
+                alert('Please configure your API endpoint first in the settings above');
+                return;
+            }
+            
             try {
-                const maxSize = 400;
+                const maxSize = 800;
                 let width = video.videoWidth;
                 let height = video.videoHeight;
                 
@@ -694,7 +613,7 @@
                 document.getElementById('identifyKeyBtn').classList.remove('hidden');
                 document.getElementById('captureIdentifyBtn').classList.add('hidden');
                 
-                resultsDiv.innerHTML = '<div class="loading"><div class="spinner"></div><p>Comparing keys...</p></div>';
+                resultsDiv.innerHTML = '<div class="loading"><div class="spinner"></div><p>Analyzing with AI...</p></div>';
                 
                 await initDB();
                 const keys = await getAllKeys();
@@ -704,31 +623,38 @@
                     return;
                 }
                 
-                const matches = [];
-                for (const key of keys) {
-                    const similarity = await compareImages(identifyImage, key.image);
-                    console.log(`${key.label}: ${similarity.toFixed(1)}%`);
-                    matches.push({ key: key, similarity: similarity });
+                // Call API
+                const response = await fetch(apiEndpoint, {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json'
+                    },
+                    body: JSON.stringify({
+                        unknownKey: identifyImage,
+                        storedKeys: keys.map(k => ({ label: k.label, image: k.image }))
+                    })
+                });
+                
+                if (!response.ok) {
+                    throw new Error('API request failed: ' + response.statusText);
                 }
                 
-                matches.sort((a, b) => b.similarity - a.similarity);
+                const data = await response.json();
+                const aiResults = data.results || [];
+                
+                // Map results back to full key objects
+                const matches = aiResults.map(result => ({
+                    key: keys[result.index],
+                    similarity: result.similarity,
+                    reasoning: result.reasoning
+                }));
+                
                 displayMatches(matches, resultsDiv);
                 
             } catch (err) {
-                alert('Error: ' + err.message);
+                resultsDiv.innerHTML = `<div class="no-match">❌ Error: ${err.message}<br><br>Make sure your API endpoint is configured correctly.</div>`;
+                console.error(err);
             }
-        }
-        
-        async function getAllKeys() {
-            await initDB();
-            return new Promise((resolve, reject) => {
-                const transaction = db.transaction(['keys'], 'readonly');
-                const objectStore = transaction.objectStore('keys');
-                const request = objectStore.getAll();
-                
-                request.onsuccess = () => resolve(request.result);
-                request.onerror = () => reject(request.error);
-            });
         }
         
         function displayMatches(matches, resultsDiv) {
@@ -741,14 +667,15 @@
             const topMatches = matches.slice(0, 3);
             
             topMatches.forEach((match, index) => {
-                const isBestMatch = index === 0 && match.similarity > 75;
+                const isBestMatch = index === 0 && match.similarity > 70;
                 const matchClass = isBestMatch ? 'match-result best-match' : 'match-result';
                 
                 html += `
                     <div class="${matchClass}">
-                        ${isBestMatch ? '<h3>✓ Best Match</h3>' : '<h3>Possible Match #' + (index + 1) + '</h3>'}
-                        <div class="match-score">${match.similarity.toFixed(1)}% Similar</div>
+                        ${isBestMatch ? '<h3>✓ Best Match (AI)</h3>' : '<h3>Possible Match #' + (index + 1) + '</h3>'}
+                        <div class="match-score">${match.similarity}% Similar</div>
                         <p><strong>Label:</strong> ${match.key.label}</p>
+                        ${match.reasoning ? `<p><strong>AI Analysis:</strong> ${match.reasoning}</p>` : ''}
                         ${match.key.notes ? `<p><strong>Notes:</strong> ${match.key.notes}</p>` : ''}
                         <p><strong>Added:</strong> ${new Date(match.key.timestamp).toLocaleDateString()}</p>
                         <img src="${match.key.image}" alt="${match.key.label}" style="max-width: 200px; border-radius: 8px; margin-top: 10px;">
@@ -756,11 +683,23 @@
                 `;
             });
             
-            if (matches[0].similarity < 75) {
-                html = '<div class="no-match">⚠️ No confident matches found. Best match: ' + matches[0].similarity.toFixed(1) + '%</div>' + html;
+            if (matches[0].similarity < 70) {
+                html = '<div class="no-match">⚠️ No confident matches found. Best match: ' + matches[0].similarity + '%</div>' + html;
             }
             
             resultsDiv.innerHTML = html;
+        }
+        
+        async function getAllKeys() {
+            await initDB();
+            return new Promise((resolve, reject) => {
+                const transaction = db.transaction(['keys'], 'readonly');
+                const objectStore = transaction.objectStore('keys');
+                const request = objectStore.getAll();
+                
+                request.onsuccess = () => resolve(request.result);
+                request.onerror = () => reject(request.error);
+            });
         }
         
         async function loadKeys() {
@@ -829,9 +768,7 @@
             const sizeMB = (totalSize / 1024 / 1024).toFixed(2);
             
             const infoDiv = document.getElementById('storageInfo');
-            infoDiv.innerHTML = `
-                ${keys.length} keys stored | ~${sizeMB} MB used
-            `;
+            infoDiv.innerHTML = `${keys.length} keys stored | ~${sizeMB} MB used`;
         }
         
         async function exportKeys() {
