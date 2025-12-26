@@ -310,7 +310,7 @@
             </svg>
             Key Identification System
         </h1>
-        <div class="version-header">v241226.08</div>
+        <div class="version-header">v241226.09</div>
         
         <div class="section">
             <h2>Add New Key</h2>
@@ -323,22 +323,19 @@
                 <button id="captureBtn" class="hidden" onclick="captureAndSave()">Capture Photo</button>
             </div>
             <div class="tip">
-                📸 <strong>Tip:</strong> Photograph keys on a plain contrasting background. The blade/teeth should be clearly visible.
+                📸 <strong>Tip:</strong> For best matching, photograph the entire key clearly on a contrasting background.
             </div>
             <div class="storage-info" id="storageInfo"></div>
         </div>
         
         <div class="section">
-            <h2>Identify Unknown Key <span class="edge-badge">EDGE DETECTION</span></h2>
+            <h2>Identify Unknown Key <span class="edge-badge">PATTERN MATCH</span></h2>
             <video id="identifyVideo" autoplay></video>
             <canvas id="identifyCanvas" class="preview-canvas"></canvas>
             <div id="identifyResults"></div>
             <div>
                 <button id="identifyKeyBtn" onclick="startIdentify()">Identify Key</button>
                 <button id="captureIdentifyBtn" class="hidden" onclick="captureAndIdentify()">Capture Photo</button>
-            </div>
-            <div class="tip">
-                🔍 <strong>Algorithm:</strong> Uses edge detection to extract tooth patterns, then correlates across multiple orientations (normal, flipped, rotated) to find the best match regardless of lighting or angle.
             </div>
         </div>
         
@@ -358,8 +355,8 @@
     </div>
 
     <script>
-        // Version: 241226.08 (YYMMDD.XX) - Edge detection + correlation matching
-        const APP_VERSION = "241226.08";
+        // Version: 241226.09 - Simplified robust matching
+        const APP_VERSION = "241226.09";
         
         // Pull-to-refresh functionality
         let touchStartY = 0;
@@ -390,7 +387,6 @@
             touchEndY = 0;
         }, { passive: true });
         
-        // Create manifest dynamically with proper icon
         const manifestData = {
             "name": "Key Identification System",
             "short_name": "Key ID",
@@ -428,12 +424,9 @@
         
         async function initDB() {
             return new Promise((resolve, reject) => {
-                const request = indexedDB.open('KeyDatabase', 3); // Bumped version for edge pattern storage
+                const request = indexedDB.open('KeyDatabase', 4);
                 
-                request.onerror = () => {
-                    console.error('DB error:', request.error);
-                    reject(request.error);
-                };
+                request.onerror = () => reject(request.error);
                 
                 request.onsuccess = () => {
                     db = request.result;
@@ -445,165 +438,101 @@
                     const db = event.target.result;
                     if (!db.objectStoreNames.contains('keys')) {
                         db.createObjectStore('keys', { keyPath: 'id' });
-                        console.log('Object store created');
                     }
                 };
             });
         }
         
-        // Extract edge pattern from image using Sobel edge detection
-        function extractEdgePattern(imageData) {
-            const canvas = document.createElement('canvas');
-            const ctx = canvas.getContext('2d');
-            
-            const img = new Image();
-            img.src = imageData;
-            
+        // Simplified: Just compare raw pixel similarity with SSIM-like approach
+        async function compareImages(img1Data, img2Data) {
             return new Promise((resolve) => {
-                img.onload = () => {
-                    const width = 200;
-                    const height = 200;
-                    canvas.width = width;
-                    canvas.height = height;
-                    
-                    // Draw and convert to grayscale
-                    ctx.drawImage(img, 0, 0, width, height);
-                    const imgData = ctx.getImageData(0, 0, width, height);
-                    const data = imgData.data;
-                    
-                    // Convert to grayscale
-                    const gray = new Float32Array(width * height);
-                    for (let i = 0; i < data.length; i += 4) {
-                        const idx = i / 4;
-                        gray[idx] = data[i] * 0.299 + data[i + 1] * 0.587 + data[i + 2] * 0.114;
-                    }
-                    
-                    // Apply Gaussian blur first to reduce noise
-                    const blurred = gaussianBlur(gray, width, height);
-                    
-                    // Sobel edge detection
-                    const edges = new Float32Array(width * height);
-                    for (let y = 1; y < height - 1; y++) {
-                        for (let x = 1; x < width - 1; x++) {
-                            const idx = y * width + x;
+                const canvas1 = document.createElement('canvas');
+                const canvas2 = document.createElement('canvas');
+                const ctx1 = canvas1.getContext('2d');
+                const ctx2 = canvas2.getContext('2d');
+                
+                const img1 = new Image();
+                const img2 = new Image();
+                
+                let loaded = 0;
+                
+                function checkLoaded() {
+                    loaded++;
+                    if (loaded === 2) {
+                        const size = 128;
+                        canvas1.width = canvas2.width = size;
+                        canvas1.height = canvas2.height = size;
+                        
+                        // Test multiple orientations
+                        const orientations = [
+                            { rotate: 0, flipH: false, flipV: false },
+                            { rotate: 0, flipH: true, flipV: false },
+                            { rotate: 180, flipH: false, flipV: false },
+                            { rotate: 180, flipH: true, flipV: false }
+                        ];
+                        
+                        let bestSimilarity = 0;
+                        
+                        for (const orient of orientations) {
+                            ctx1.clearRect(0, 0, size, size);
+                            ctx1.drawImage(img1, 0, 0, size, size);
                             
-                            // Sobel X kernel
-                            const gx = 
-                                -blurred[(y-1)*width + (x-1)] + blurred[(y-1)*width + (x+1)] +
-                                -2*blurred[y*width + (x-1)] + 2*blurred[y*width + (x+1)] +
-                                -blurred[(y+1)*width + (x-1)] + blurred[(y+1)*width + (x+1)];
+                            ctx2.clearRect(0, 0, size, size);
+                            ctx2.save();
+                            ctx2.translate(size / 2, size / 2);
+                            if (orient.rotate) ctx2.rotate((orient.rotate * Math.PI) / 180);
+                            if (orient.flipH) ctx2.scale(-1, 1);
+                            if (orient.flipV) ctx2.scale(1, -1);
+                            ctx2.drawImage(img2, -size / 2, -size / 2, size, size);
+                            ctx2.restore();
                             
-                            // Sobel Y kernel
-                            const gy = 
-                                -blurred[(y-1)*width + (x-1)] - 2*blurred[(y-1)*width + x] - blurred[(y-1)*width + (x+1)] +
-                                blurred[(y+1)*width + (x-1)] + 2*blurred[(y+1)*width + x] + blurred[(y+1)*width + (x+1)];
+                            const data1 = ctx1.getImageData(0, 0, size, size).data;
+                            const data2 = ctx2.getImageData(0, 0, size, size).data;
                             
-                            edges[idx] = Math.sqrt(gx*gx + gy*gy);
+                            // Convert to grayscale and compute SSIM-like metric
+                            const gray1 = [];
+                            const gray2 = [];
+                            
+                            for (let i = 0; i < data1.length; i += 4) {
+                                gray1.push(data1[i] * 0.299 + data1[i + 1] * 0.587 + data1[i + 2] * 0.114);
+                                gray2.push(data2[i] * 0.299 + data2[i + 1] * 0.587 + data2[i + 2] * 0.114);
+                            }
+                            
+                            // Compute mean and variance
+                            const mean1 = gray1.reduce((a, b) => a + b) / gray1.length;
+                            const mean2 = gray2.reduce((a, b) => a + b) / gray2.length;
+                            
+                            let var1 = 0, var2 = 0, covar = 0;
+                            for (let i = 0; i < gray1.length; i++) {
+                                const diff1 = gray1[i] - mean1;
+                                const diff2 = gray2[i] - mean2;
+                                var1 += diff1 * diff1;
+                                var2 += diff2 * diff2;
+                                covar += diff1 * diff2;
+                            }
+                            var1 /= gray1.length;
+                            var2 /= gray2.length;
+                            covar /= gray1.length;
+                            
+                            const c1 = 6.5025, c2 = 58.5225; // Constants for SSIM
+                            const numerator = (2 * mean1 * mean2 + c1) * (2 * covar + c2);
+                            const denominator = (mean1 * mean1 + mean2 * mean2 + c1) * (var1 + var2 + c2);
+                            
+                            const ssim = numerator / denominator;
+                            const similarity = ((ssim + 1) / 2) * 100; // Convert to 0-100%
+                            
+                            bestSimilarity = Math.max(bestSimilarity, similarity);
                         }
+                        
+                        resolve(bestSimilarity);
                     }
-                    
-                    // Normalize edges
-                    const maxEdge = Math.max(...edges);
-                    for (let i = 0; i < edges.length; i++) {
-                        edges[i] = edges[i] / maxEdge;
-                    }
-                    
-                    // Extract 1D profile along horizontal center (key blade)
-                    const profile = extractHorizontalProfile(edges, width, height);
-                    
-                    resolve({ edges: Array.from(edges), profile: profile, width: width, height: height });
-                };
+                }
+                
+                img1.onload = checkLoaded;
+                img2.onload = checkLoaded;
+                img1.src = img1Data;
+                img2.src = img2Data;
             });
-        }
-        
-        // Simple Gaussian blur
-        function gaussianBlur(data, width, height) {
-            const blurred = new Float32Array(width * height);
-            const kernel = [1, 2, 1, 2, 4, 2, 1, 2, 1];
-            const kernelSum = 16;
-            
-            for (let y = 1; y < height - 1; y++) {
-                for (let x = 1; x < width - 1; x++) {
-                    let sum = 0;
-                    for (let ky = -1; ky <= 1; ky++) {
-                        for (let kx = -1; kx <= 1; kx++) {
-                            sum += data[(y+ky)*width + (x+kx)] * kernel[(ky+1)*3 + (kx+1)];
-                        }
-                    }
-                    blurred[y*width + x] = sum / kernelSum;
-                }
-            }
-            
-            return blurred;
-        }
-        
-        // Extract horizontal profile through center of image (where key teeth are)
-        function extractHorizontalProfile(edges, width, height) {
-            const profile = [];
-            const centerY = Math.floor(height / 2);
-            const bandHeight = Math.floor(height / 4); // Sample a band, not just one line
-            
-            for (let x = 0; x < width; x++) {
-                let sum = 0;
-                for (let y = centerY - bandHeight; y < centerY + bandHeight; y++) {
-                    if (y >= 0 && y < height) {
-                        sum += edges[y * width + x];
-                    }
-                }
-                profile.push(sum / (bandHeight * 2));
-            }
-            
-            return profile;
-        }
-        
-        // Normalize profile for scale invariance
-        function normalizeProfile(profile) {
-            if (profile.length === 0) return profile;
-            
-            const max = Math.max(...profile);
-            const min = Math.min(...profile);
-            const range = max - min;
-            
-            if (range === 0) return profile.map(() => 0);
-            
-            return profile.map(v => (v - min) / range);
-        }
-        
-        // Cross-correlation between two profiles
-        function crossCorrelate(profile1, profile2) {
-            const len1 = profile1.length;
-            const len2 = profile2.length;
-            const minLen = Math.min(len1, len2);
-            
-            let maxCorr = -Infinity;
-            
-            // Try different alignments
-            for (let offset = -minLen/2; offset < minLen/2; offset++) {
-                let correlation = 0;
-                let count = 0;
-                
-                for (let i = 0; i < minLen; i++) {
-                    const idx1 = i;
-                    const idx2 = i + offset;
-                    
-                    if (idx1 >= 0 && idx1 < len1 && idx2 >= 0 && idx2 < len2) {
-                        correlation += profile1[idx1] * profile2[idx2];
-                        count++;
-                    }
-                }
-                
-                if (count > 0) {
-                    correlation /= count;
-                    maxCorr = Math.max(maxCorr, correlation);
-                }
-            }
-            
-            return maxCorr;
-        }
-        
-        // Transform profile for different orientations
-        function flipProfile(profile) {
-            return [...profile].reverse();
         }
         
         async function startAddKey() {
@@ -670,11 +599,6 @@
                 document.getElementById('addKeyBtn').classList.remove('hidden');
                 document.getElementById('captureBtn').classList.add('hidden');
                 
-                // Extract edge pattern
-                console.log('Extracting edge pattern...');
-                const edgePattern = await extractEdgePattern(capturedImage);
-                console.log('Edge pattern extracted, profile length:', edgePattern.profile.length);
-                
                 await initDB();
                 
                 const key = {
@@ -682,18 +606,14 @@
                     label: label,
                     notes: notes,
                     image: capturedImage,
-                    edgePattern: edgePattern, // Store the edge pattern
                     timestamp: new Date().toISOString()
                 };
-                
-                console.log('Saving key:', key.label);
                 
                 const transaction = db.transaction(['keys'], 'readwrite');
                 const objectStore = transaction.objectStore('keys');
                 const request = objectStore.add(key);
                 
                 request.onsuccess = () => {
-                    console.log('Key saved successfully');
                     document.getElementById('keyLabel').value = '';
                     document.getElementById('keyNotes').value = '';
                     
@@ -702,19 +622,16 @@
                     }, 2000);
                     
                     capturedImage = null;
-                    
                     alert('Key saved successfully!');
                     loadKeys();
                 };
                 
                 request.onerror = () => {
-                    console.error('Save error:', request.error);
                     alert('Error saving key: ' + request.error);
                 };
                 
             } catch (err) {
                 alert('Error: ' + err.message);
-                console.error(err);
             }
         }
         
@@ -777,12 +694,7 @@
                 document.getElementById('identifyKeyBtn').classList.remove('hidden');
                 document.getElementById('captureIdentifyBtn').classList.add('hidden');
                 
-                resultsDiv.innerHTML = '<div class="loading"><div class="spinner"></div><p>Analyzing edge pattern...</p></div>';
-                
-                // Extract edge pattern for captured image
-                console.log('Extracting edge pattern for unknown key...');
-                const capturedPattern = await extractEdgePattern(identifyImage);
-                console.log('Pattern extracted');
+                resultsDiv.innerHTML = '<div class="loading"><div class="spinner"></div><p>Comparing keys...</p></div>';
                 
                 await initDB();
                 const keys = await getAllKeys();
@@ -792,12 +704,18 @@
                     return;
                 }
                 
-                const matches = await compareWithStoredKeys(capturedPattern, keys);
+                const matches = [];
+                for (const key of keys) {
+                    const similarity = await compareImages(identifyImage, key.image);
+                    console.log(`${key.label}: ${similarity.toFixed(1)}%`);
+                    matches.push({ key: key, similarity: similarity });
+                }
+                
+                matches.sort((a, b) => b.similarity - a.similarity);
                 displayMatches(matches, resultsDiv);
                 
             } catch (err) {
                 alert('Error: ' + err.message);
-                console.error(err);
             }
         }
         
@@ -808,56 +726,9 @@
                 const objectStore = transaction.objectStore('keys');
                 const request = objectStore.getAll();
                 
-                request.onsuccess = () => {
-                    console.log('Retrieved keys:', request.result.length);
-                    resolve(request.result);
-                };
+                request.onsuccess = () => resolve(request.result);
                 request.onerror = () => reject(request.error);
             });
-        }
-        
-        async function compareWithStoredKeys(capturedPattern, storedKeys) {
-            const matches = [];
-            
-            // Normalize the captured profile
-            const capturedProfile = normalizeProfile(capturedPattern.profile);
-            const capturedFlipped = flipProfile(capturedProfile);
-            
-            for (const key of storedKeys) {
-                // If key doesn't have edge pattern (old format), compute it
-                if (!key.edgePattern) {
-                    console.log(`Computing edge pattern for ${key.label}...`);
-                    key.edgePattern = await extractEdgePattern(key.image);
-                }
-                
-                // Normalize stored profile
-                const storedProfile = normalizeProfile(key.edgePattern.profile);
-                const storedFlipped = flipProfile(storedProfile);
-                
-                // Try all orientations and find best correlation
-                const correlations = [
-                    crossCorrelate(capturedProfile, storedProfile),      // normal vs normal
-                    crossCorrelate(capturedProfile, storedFlipped),      // normal vs flipped
-                    crossCorrelate(capturedFlipped, storedProfile),      // flipped vs normal
-                    crossCorrelate(capturedFlipped, storedFlipped)       // flipped vs flipped
-                ];
-                
-                const bestCorrelation = Math.max(...correlations);
-                
-                // Convert correlation to similarity percentage (0-100)
-                // Correlation ranges from -1 to 1, we map 0-1 to 0-100
-                const similarity = Math.max(0, Math.min(100, bestCorrelation * 100));
-                
-                console.log(`${key.label}: correlations=${correlations.map(c => c.toFixed(3))}, best=${bestCorrelation.toFixed(3)}, similarity=${similarity.toFixed(1)}%`);
-                
-                matches.push({
-                    key: key,
-                    similarity: similarity
-                });
-            }
-            
-            matches.sort((a, b) => b.similarity - a.similarity);
-            return matches;
         }
         
         function displayMatches(matches, resultsDiv) {
@@ -870,7 +741,7 @@
             const topMatches = matches.slice(0, 3);
             
             topMatches.forEach((match, index) => {
-                const isBestMatch = index === 0 && match.similarity > 70;
+                const isBestMatch = index === 0 && match.similarity > 75;
                 const matchClass = isBestMatch ? 'match-result best-match' : 'match-result';
                 
                 html += `
@@ -885,8 +756,8 @@
                 `;
             });
             
-            if (matches[0].similarity < 70) {
-                html = '<div class="no-match">⚠️ No confident matches found. The best match is only ' + matches[0].similarity.toFixed(1) + '% similar.</div>' + html;
+            if (matches[0].similarity < 75) {
+                html = '<div class="no-match">⚠️ No confident matches found. Best match: ' + matches[0].similarity.toFixed(1) + '%</div>' + html;
             }
             
             resultsDiv.innerHTML = html;
@@ -959,7 +830,7 @@
             
             const infoDiv = document.getElementById('storageInfo');
             infoDiv.innerHTML = `
-                ${keys.length} keys stored | ~${sizeMB} MB used | IndexedDB (can store 100s of keys)
+                ${keys.length} keys stored | ~${sizeMB} MB used
             `;
         }
         
