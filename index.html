@@ -253,7 +253,7 @@
     </style>
 </head>
 <body>
-    <div class="version-badge">v241226.01</div>
+    <div class="version-badge">v241226.02</div>
     
     <div class="container">
         <h1>
@@ -303,8 +303,8 @@
     </div>
 
     <script>
-        // Version: 241226.01 (YYMMDD.XX)
-        const APP_VERSION = "241226.01";
+        // Version: 241226.02 (YYMMDD.XX) - Improved matching algorithm
+        const APP_VERSION = "241226.02";
         
         // Create manifest dynamically with proper icon
         const manifestData = {
@@ -585,7 +585,7 @@
             const matches = [];
             
             for (const key of storedKeys) {
-                const similarity = await compareImages(capturedImage, key.image);
+                const similarity = await compareImagesAdvanced(capturedImage, key.image);
                 matches.push({
                     key: key,
                     similarity: similarity
@@ -596,7 +596,53 @@
             return matches;
         }
         
-        async function compareImages(img1Data, img2Data) {
+        // Extract edge-detected features (focuses on teeth/contours)
+        function extractEdgeFeatures(imageData) {
+            const width = imageData.width;
+            const height = imageData.height;
+            const data = imageData.data;
+            
+            // Apply Sobel edge detection
+            const edges = [];
+            for (let y = 1; y < height - 1; y++) {
+                for (let x = 1; x < width - 1; x++) {
+                    const idx = (y * width + x) * 4;
+                    
+                    // Sobel kernels
+                    const gx = 
+                        -data[((y-1)*width + (x-1))*4] + data[((y-1)*width + (x+1))*4] +
+                        -2*data[(y*width + (x-1))*4] + 2*data[(y*width + (x+1))*4] +
+                        -data[((y+1)*width + (x-1))*4] + data[((y+1)*width + (x+1))*4];
+                    
+                    const gy = 
+                        -data[((y-1)*width + (x-1))*4] - 2*data[((y-1)*width + x)*4] - data[((y-1)*width + (x+1))*4] +
+                        data[((y+1)*width + (x-1))*4] + 2*data[((y+1)*width + x)*4] + data[((y+1)*width + (x+1))*4];
+                    
+                    const magnitude = Math.sqrt(gx*gx + gy*gy);
+                    edges.push(magnitude > 50 ? 1 : 0);
+                }
+            }
+            
+            return edges;
+        }
+        
+        // Create rotation-invariant histogram
+        function createHistogram(imageData) {
+            const data = imageData.data;
+            const histogram = new Array(32).fill(0); // 32 bins
+            
+            for (let i = 0; i < data.length; i += 4) {
+                const bin = Math.floor(data[i] / 8); // 256/32 = 8
+                histogram[bin]++;
+            }
+            
+            // Normalize
+            const total = data.length / 4;
+            return histogram.map(v => v / total);
+        }
+        
+        // Enhanced comparison with rotation/flip invariance
+        async function compareImagesAdvanced(img1Data, img2Data) {
             return new Promise((resolve) => {
                 const canvas1 = document.createElement('canvas');
                 const canvas2 = document.createElement('canvas');
@@ -615,21 +661,65 @@
                         canvas1.width = canvas2.width = size;
                         canvas1.height = canvas2.height = size;
                         
+                        // Draw original
                         ctx1.drawImage(img1, 0, 0, size, size);
                         ctx2.drawImage(img2, 0, 0, size, size);
                         
-                        const data1 = ctx1.getImageData(0, 0, size, size).data;
-                        const data2 = ctx2.getImageData(0, 0, size, size).data;
+                        const data1 = ctx1.getImageData(0, 0, size, size);
+                        const data2 = ctx2.getImageData(0, 0, size, size);
                         
-                        let diff = 0;
-                        for (let i = 0; i < data1.length; i += 4) {
-                            diff += Math.abs(data1[i] - data2[i]);
+                        // Extract features
+                        const edges1 = extractEdgeFeatures(data1);
+                        const edges2 = extractEdgeFeatures(data2);
+                        const hist1 = createHistogram(data1);
+                        const hist2 = createHistogram(data2);
+                        
+                        // Compare edge patterns (focus on teeth)
+                        let edgeSimilarity = 0;
+                        const edgeLength = Math.min(edges1.length, edges2.length);
+                        for (let i = 0; i < edgeLength; i++) {
+                            if (edges1[i] === edges2[i]) edgeSimilarity++;
                         }
+                        edgeSimilarity = (edgeSimilarity / edgeLength) * 100;
                         
-                        const maxDiff = size * size * 255;
-                        const similarity = ((maxDiff - diff) / maxDiff) * 100;
+                        // Compare histograms (rotation invariant)
+                        let histSimilarity = 0;
+                        for (let i = 0; i < hist1.length; i++) {
+                            histSimilarity += 1 - Math.abs(hist1[i] - hist2[i]);
+                        }
+                        histSimilarity = (histSimilarity / hist1.length) * 100;
                         
-                        resolve(similarity);
+                        // Try flipped version
+                        ctx2.clearRect(0, 0, size, size);
+                        ctx2.save();
+                        ctx2.scale(-1, 1);
+                        ctx2.drawImage(img2, -size, 0, size, size);
+                        ctx2.restore();
+                        
+                        const data2Flipped = ctx2.getImageData(0, 0, size, size);
+                        const edges2Flipped = extractEdgeFeatures(data2Flipped);
+                        const hist2Flipped = createHistogram(data2Flipped);
+                        
+                        let edgeSimilarityFlipped = 0;
+                        for (let i = 0; i < edgeLength; i++) {
+                            if (edges1[i] === edges2Flipped[i]) edgeSimilarityFlipped++;
+                        }
+                        edgeSimilarityFlipped = (edgeSimilarityFlipped / edgeLength) * 100;
+                        
+                        let histSimilarityFlipped = 0;
+                        for (let i = 0; i < hist1.length; i++) {
+                            histSimilarityFlipped += 1 - Math.abs(hist1[i] - hist2Flipped[i]);
+                        }
+                        histSimilarityFlipped = (histSimilarityFlipped / hist1.length) * 100;
+                        
+                        // Take best of normal and flipped
+                        const bestEdge = Math.max(edgeSimilarity, edgeSimilarityFlipped);
+                        const bestHist = Math.max(histSimilarity, histSimilarityFlipped);
+                        
+                        // Weighted combination: edges (teeth) 70%, histogram 30%
+                        const finalSimilarity = (bestEdge * 0.7) + (bestHist * 0.3);
+                        
+                        resolve(finalSimilarity);
                     }
                 }
                 
@@ -650,7 +740,7 @@
             const topMatches = matches.slice(0, 3);
             
             topMatches.forEach((match, index) => {
-                const isBestMatch = index === 0 && match.similarity > 50;
+                const isBestMatch = index === 0 && match.similarity > 60;
                 const matchClass = isBestMatch ? 'match-result best-match' : 'match-result';
                 
                 html += `
@@ -665,8 +755,8 @@
                 `;
             });
             
-            if (matches[0].similarity < 50) {
-                html = '<div class="no-match">No confident matches found. The best match is only ' + matches[0].similarity.toFixed(1) + '% similar.</div>' + html;
+            if (matches[0].similarity < 60) {
+                html = '<div class="no-match">⚠️ No confident matches found. The best match is only ' + matches[0].similarity.toFixed(1) + '% similar.</div>' + html;
             }
             
             resultsDiv.innerHTML = html;
