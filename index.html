@@ -676,14 +676,25 @@
                 }
                 
                 const data = await response.json();
+                console.log('API Response:', data); // Debug logging
+                
                 const aiResults = data.results || [];
                 
-                // Map results back to full key objects
-                const matches = aiResults.map(result => ({
-                    key: keys[result.index],
-                    similarity: result.similarity,
-                    reasoning: result.reasoning
-                }));
+                // Map results back to full key objects with validation
+                const matches = aiResults
+                    .filter(result => result.index !== undefined && keys[result.index])
+                    .map(result => ({
+                        key: keys[result.index],
+                        similarity: result.similarity || 0,
+                        reasoning: result.reasoning || 'No reasoning provided'
+                    }));
+                
+                console.log('Mapped matches:', matches); // Debug logging
+                
+                if (matches.length === 0) {
+                    resultsDiv.innerHTML = '<div class="no-match">API returned no valid matches. Check the browser console for details.</div>';
+                    return;
+                }
                 
                 displayMatches(matches, resultsDiv);
                 
@@ -868,3 +879,4 @@
     </script>
 </body>
 </html>
+
