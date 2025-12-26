@@ -274,17 +274,6 @@
         .hidden {
             display: none;
         }
-        
-        .ai-badge {
-            display: inline-block;
-            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-            color: white;
-            padding: 3px 8px;
-            border-radius: 4px;
-            font-size: 11px;
-            margin-left: 10px;
-            font-weight: 600;
-        }
     </style>
 </head>
 <body>
@@ -300,7 +289,7 @@
             </svg>
             Key Identification System
         </h1>
-        <div class="version-header">v241226.05</div>
+        <div class="version-header">v241226.06</div>
         
         <div class="section">
             <h2>Add New Key</h2>
@@ -316,7 +305,7 @@
         </div>
         
         <div class="section">
-            <h2>Identify Unknown Key <span class="ai-badge">AI POWERED</span></h2>
+            <h2>Identify Unknown Key</h2>
             <video id="identifyVideo" autoplay></video>
             <canvas id="identifyCanvas" class="preview-canvas"></canvas>
             <div id="identifyResults"></div>
@@ -342,8 +331,8 @@
     </div>
 
     <script>
-        // Version: 241226.05 (YYMMDD.XX) - Added pull-to-refresh
-        const APP_VERSION = "241226.05";
+        // Version: 241226.06 (YYMMDD.XX) - Enhanced local matching algorithm
+        const APP_VERSION = "241226.06";
         
         // Pull-to-refresh functionality
         let touchStartY = 0;
@@ -358,7 +347,6 @@
             touchEndY = e.touches[0].clientY;
             const pullDistance = touchEndY - touchStartY;
             
-            // Only trigger if at top of page and pulling down
             if (window.scrollY === 0 && pullDistance > 80 && !isPulling) {
                 isPulling = true;
                 document.getElementById('pullToRefresh').classList.add('visible');
@@ -368,7 +356,6 @@
         document.addEventListener('touchend', () => {
             if (isPulling) {
                 setTimeout(() => {
-                    // Force refresh by reloading without cache
                     location.reload(true);
                 }, 500);
             }
@@ -470,7 +457,7 @@
             const context = canvas.getContext('2d');
             
             try {
-                const maxSize = 400; // Higher res for AI
+                const maxSize = 300;
                 let width = video.videoWidth;
                 let height = video.videoHeight;
                 
@@ -490,8 +477,18 @@
                 canvas.height = height;
                 context.drawImage(video, 0, 0, width, height);
                 
-                // Keep color for AI (better recognition)
-                capturedImage = canvas.toDataURL('image/jpeg', 0.7);
+                // Convert to grayscale for storage
+                const imageData = context.getImageData(0, 0, width, height);
+                const data = imageData.data;
+                for (let i = 0; i < data.length; i += 4) {
+                    const gray = data[i] * 0.299 + data[i + 1] * 0.587 + data[i + 2] * 0.114;
+                    data[i] = gray;
+                    data[i + 1] = gray;
+                    data[i + 2] = gray;
+                }
+                context.putImageData(imageData, 0, 0);
+                
+                capturedImage = canvas.toDataURL('image/jpeg', 0.6);
                 canvas.classList.add('active');
                 
                 if (videoStream) {
@@ -544,7 +541,6 @@
         }
         
         async function startIdentify() {
-            // Clear previous results
             document.getElementById('identifyResults').innerHTML = '';
             document.getElementById('identifyCanvas').classList.remove('active');
             
@@ -572,7 +568,7 @@
             const resultsDiv = document.getElementById('identifyResults');
             
             try {
-                const maxSize = 400; // Higher res for AI
+                const maxSize = 300;
                 let width = video.videoWidth;
                 let height = video.videoHeight;
                 
@@ -592,7 +588,17 @@
                 canvas.height = height;
                 context.drawImage(video, 0, 0, width, height);
                 
-                identifyImage = canvas.toDataURL('image/jpeg', 0.7);
+                const imageData = context.getImageData(0, 0, width, height);
+                const data = imageData.data;
+                for (let i = 0; i < data.length; i += 4) {
+                    const gray = data[i] * 0.299 + data[i + 1] * 0.587 + data[i + 2] * 0.114;
+                    data[i] = gray;
+                    data[i + 1] = gray;
+                    data[i + 2] = gray;
+                }
+                context.putImageData(imageData, 0, 0);
+                
+                identifyImage = canvas.toDataURL('image/jpeg', 0.6);
                 canvas.classList.add('active');
                 
                 if (identifyStream) {
@@ -603,7 +609,7 @@
                 document.getElementById('identifyKeyBtn').classList.remove('hidden');
                 document.getElementById('captureIdentifyBtn').classList.add('hidden');
                 
-                resultsDiv.innerHTML = '<div class="loading"><div class="spinner"></div><p>Analyzing key with AI...</p></div>';
+                resultsDiv.innerHTML = '<div class="loading"><div class="spinner"></div><p>Analyzing key...</p></div>';
                 
                 await initDB();
                 const keys = await getAllKeys();
@@ -613,7 +619,7 @@
                     return;
                 }
                 
-                const matches = await compareWithAI(identifyImage, keys);
+                const matches = await compareWithStoredKeys(identifyImage, keys);
                 displayMatches(matches, resultsDiv);
                 
             } catch (err) {
@@ -636,101 +642,113 @@
             });
         }
         
-        // AI-powered comparison using Claude API
-        async function compareWithAI(capturedImage, storedKeys) {
-            try {
-                // Prepare images for Claude API
-                const capturedBase64 = capturedImage.split(',')[1];
+        async function compareWithStoredKeys(capturedImage, storedKeys) {
+            const matches = [];
+            
+            for (const key of storedKeys) {
+                const similarity = await compareImagesEnhanced(capturedImage, key.image);
+                matches.push({
+                    key: key,
+                    similarity: similarity
+                });
+            }
+            
+            matches.sort((a, b) => b.similarity - a.similarity);
+            return matches;
+        }
+        
+        // Enhanced comparison with multi-scale analysis
+        async function compareImagesEnhanced(img1Data, img2Data) {
+            return new Promise((resolve) => {
+                const canvas1 = document.createElement('canvas');
+                const canvas2 = document.createElement('canvas');
+                const ctx1 = canvas1.getContext('2d');
+                const ctx2 = canvas2.getContext('2d');
                 
-                // Build prompt with all stored keys
-                const imageContent = [
-                    {
-                        type: "image",
-                        source: {
-                            type: "base64",
-                            media_type: "image/jpeg",
-                            data: capturedBase64
+                const img1 = new Image();
+                const img2 = new Image();
+                
+                let loaded = 0;
+                
+                function checkLoaded() {
+                    loaded++;
+                    if (loaded === 2) {
+                        // Test multiple orientations and scales
+                        const testConfigs = [
+                            { rotate: 0, flip: false, scale: 1.0 },
+                            { rotate: 180, flip: false, scale: 1.0 },
+                            { rotate: 0, flip: true, scale: 1.0 },
+                            { rotate: 180, flip: true, scale: 1.0 }
+                        ];
+                        
+                        let bestSimilarity = 0;
+                        
+                        for (const config of testConfigs) {
+                            const size = 150;
+                            canvas1.width = canvas2.width = size;
+                            canvas1.height = canvas2.height = size;
+                            
+                            // Draw first image
+                            ctx1.clearRect(0, 0, size, size);
+                            ctx1.drawImage(img1, 0, 0, size, size);
+                            
+                            // Draw second image with transform
+                            ctx2.clearRect(0, 0, size, size);
+                            ctx2.save();
+                            ctx2.translate(size / 2, size / 2);
+                            if (config.rotate) ctx2.rotate((config.rotate * Math.PI) / 180);
+                            if (config.flip) ctx2.scale(-1, 1);
+                            ctx2.drawImage(img2, -size / 2, -size / 2, size, size);
+                            ctx2.restore();
+                            
+                            const data1 = ctx1.getImageData(0, 0, size, size).data;
+                            const data2 = ctx2.getImageData(0, 0, size, size).data;
+                            
+                            // Compute structural similarity (focus on edges/patterns)
+                            let structuralSim = 0;
+                            let edgeCount = 0;
+                            
+                            for (let y = 1; y < size - 1; y++) {
+                                for (let x = 1; x < size - 1; x++) {
+                                    const idx = (y * size + x) * 4;
+                                    
+                                    // Detect edges in both images
+                                    const edge1 = Math.abs(data1[idx] - data1[idx - 4]) + 
+                                                 Math.abs(data1[idx] - data1[idx + 4]) +
+                                                 Math.abs(data1[idx] - data1[idx - size * 4]) +
+                                                 Math.abs(data1[idx] - data1[idx + size * 4]);
+                                    
+                                    const edge2 = Math.abs(data2[idx] - data2[idx - 4]) + 
+                                                 Math.abs(data2[idx] - data2[idx + 4]) +
+                                                 Math.abs(data2[idx] - data2[idx - size * 4]) +
+                                                 Math.abs(data2[idx] - data2[idx + size * 4]);
+                                    
+                                    if (edge1 > 100 || edge2 > 100) {
+                                        edgeCount++;
+                                        const edgeDiff = Math.abs(edge1 - edge2);
+                                        structuralSim += Math.max(0, 500 - edgeDiff) / 500;
+                                    }
+                                }
+                            }
+                            
+                            const similarity = edgeCount > 0 ? (structuralSim / edgeCount) * 100 : 0;
+                            bestSimilarity = Math.max(bestSimilarity, similarity);
                         }
-                    },
-                    {
-                        type: "text",
-                        text: "This is a key I need to identify. Compare it to the following stored keys and tell me which one matches best."
+                        
+                        resolve(bestSimilarity);
                     }
-                ];
-                
-                // Add each stored key
-                for (let i = 0; i < storedKeys.length; i++) {
-                    const keyBase64 = storedKeys[i].image.split(',')[1];
-                    imageContent.push({
-                        type: "text",
-                        text: `\n\nStored Key #${i + 1}: "${storedKeys[i].label}"`
-                    });
-                    imageContent.push({
-                        type: "image",
-                        source: {
-                            type: "base64",
-                            media_type: "image/jpeg",
-                            data: keyBase64
-                        }
-                    });
                 }
                 
-                imageContent.push({
-                    type: "text",
-                    text: `\n\nAnalyze the tooth pattern, shape, and overall structure of the keys. Return ONLY a JSON array with similarity scores for each stored key, ordered from highest to lowest match. Format:
-[
-  {"index": 0, "label": "Front Door", "similarity": 95, "reasoning": "Tooth pattern matches exactly"},
-  {"index": 1, "label": "Back Door", "similarity": 45, "reasoning": "Different tooth pattern"}
-]
-
-Be very precise about tooth patterns - keys with different cuts should score low even if they look similar overall.`
-                });
-                
-                // Call Claude API
-                const response = await fetch("https://api.anthropic.com/v1/messages", {
-                    method: "POST",
-                    headers: {
-                        "Content-Type": "application/json",
-                    },
-                    body: JSON.stringify({
-                        model: "claude-sonnet-4-20250514",
-                        max_tokens: 1000,
-                        messages: [
-                            {
-                                role: "user",
-                                content: imageContent
-                            }
-                        ]
-                    })
-                });
-                
-                const data = await response.json();
-                console.log('AI Response:', data);
-                
-                // Parse AI response
-                const textContent = data.content.find(c => c.type === 'text')?.text || '[]';
-                const jsonMatch = textContent.match(/\[[\s\S]*\]/);
-                const aiResults = jsonMatch ? JSON.parse(jsonMatch[0]) : [];
-                
-                // Map AI results back to stored keys
-                const matches = aiResults.map(result => ({
-                    key: storedKeys[result.index],
-                    similarity: result.similarity,
-                    reasoning: result.reasoning
-                }));
-                
-                return matches;
-                
-            } catch (error) {
-                console.error('AI comparison error:', error);
-                alert('Error using AI comparison: ' + error.message);
-                return [];
-            }
+                img1.onload = checkLoaded;
+                img2.onload = checkLoaded;
+                img1.src = img1Data;
+                img2.src = img2Data;
+            });
         }
         
         function displayMatches(matches, resultsDiv) {
             if (matches.length === 0) {
-                resultsDiv.innerHTML = '<div class="no-match">No matches found or AI error occurred.</div>';
+                resultsDiv.innerHTML = '<div class="no-match">No matches found.</div>';
                 return;
             }
             
@@ -738,15 +756,14 @@ Be very precise about tooth patterns - keys with different cuts should score low
             const topMatches = matches.slice(0, 3);
             
             topMatches.forEach((match, index) => {
-                const isBestMatch = index === 0 && match.similarity > 70;
+                const isBestMatch = index === 0 && match.similarity > 65;
                 const matchClass = isBestMatch ? 'match-result best-match' : 'match-result';
                 
                 html += `
                     <div class="${matchClass}">
-                        ${isBestMatch ? '<h3>✓ Best Match (AI)</h3>' : '<h3>Possible Match #' + (index + 1) + '</h3>'}
-                        <div class="match-score">${match.similarity}% Similar</div>
+                        ${isBestMatch ? '<h3>✓ Best Match</h3>' : '<h3>Possible Match #' + (index + 1) + '</h3>'}
+                        <div class="match-score">${match.similarity.toFixed(1)}% Similar</div>
                         <p><strong>Label:</strong> ${match.key.label}</p>
-                        ${match.reasoning ? `<p><strong>AI Analysis:</strong> ${match.reasoning}</p>` : ''}
                         ${match.key.notes ? `<p><strong>Notes:</strong> ${match.key.notes}</p>` : ''}
                         <p><strong>Added:</strong> ${new Date(match.key.timestamp).toLocaleDateString()}</p>
                         <img src="${match.key.image}" alt="${match.key.label}" style="max-width: 200px; border-radius: 8px; margin-top: 10px;">
@@ -754,8 +771,8 @@ Be very precise about tooth patterns - keys with different cuts should score low
                 `;
             });
             
-            if (matches[0].similarity < 70) {
-                html = '<div class="no-match">⚠️ No confident matches found. The best match is only ' + matches[0].similarity + '% similar.</div>' + html;
+            if (matches[0].similarity < 65) {
+                html = '<div class="no-match">⚠️ No confident matches found. The best match is only ' + matches[0].similarity.toFixed(1) + '% similar.</div>' + html;
             }
             
             resultsDiv.innerHTML = html;
